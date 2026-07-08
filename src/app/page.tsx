@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [syncInput, setSyncInput] = useState('');
   const [authSteamId, setAuthSteamId] = useState<string | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     // Sequential on purpose: loading the portfolio writes today's snapshot,
@@ -47,6 +48,10 @@ export default function Dashboard() {
       setNotice(synced ? `Signed in through Steam — synced ${synced} items.` : 'Signed in through Steam.');
     }
     if ([...params.keys()].length > 0) window.history.replaceState(null, '', '/');
+
+    void api<{ commit: string | null; branch: string | null }>('/api/version')
+      .then((v) => setVersion(v.commit ? v.commit.slice(0, 7) : null))
+      .catch(() => {});
 
     (async () => {
       try {
@@ -233,6 +238,7 @@ export default function Dashboard() {
             ))}
             <span className="dim">
               as of {fmtTimestamp(portfolio.valuation.asOf)}
+              {version ? ` · build ${version}` : ''}
             </span>
           </footer>
         </>
