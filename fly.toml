@@ -3,7 +3,7 @@
 #   flyctl volumes create cs2data --size 1
 #   flyctl deploy
 # Secrets (when you have real keys):
-#   flyctl secrets set PRICE_SOURCE_MODE=live CSFLOAT_API_KEY=... STEAM_ID=...
+#   flyctl secrets set PRICE_SOURCE_MODE=auto CSFLOAT_API_KEY=...
 app = 'cs2portfolio'
 primary_region = 'waw'
 

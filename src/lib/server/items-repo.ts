@@ -1,6 +1,6 @@
 /**
- * Stream D — items repository. Owns reading/writing the `items` table.
- * Cost basis rows live in stream C's module; we join via getAllCostBasis().
+ * Stream D - user-scoped items repository. Owns reading/writing the `items`
+ * table. Cost basis rows live in stream C and are joined in memory.
  */
 import { db } from '../db';
 import { getAllCostBasis } from '../valuation';
@@ -33,7 +33,7 @@ function rowToItem(row: ItemRow): CanonicalItem {
     const parsed: unknown = JSON.parse(row.stickers_json);
     if (Array.isArray(parsed)) stickers = parsed as StickerApplique[];
   } catch {
-    // Corrupted JSON — treat as no stickers rather than failing the read.
+    // Corrupted JSON means only the sticker display is lost.
   }
   return {
     assetId: row.asset_id,
@@ -54,22 +54,18 @@ function rowToItem(row: ItemRow): CanonicalItem {
 const SELECT_COLUMNS = `asset_id, market_hash_name, base_name, category, wear_name,
   float_value, paint_seed, stattrak, souvenir, stickers_json, icon_url, acquired_at`;
 
-/**
- * Replace-all semantics per sync: upsert every item in the new inventory and
- * delete rows for assets no longer present. Single transaction.
- */
-export function upsertItems(items: CanonicalItem[]): void {
+export function upsertItems(userId: number, items: CanonicalItem[]): void {
   const upsert = db.prepare(
     `INSERT INTO items (
-       asset_id, market_hash_name, base_name, category, wear_name,
+       user_id, asset_id, market_hash_name, base_name, category, wear_name,
        float_value, paint_seed, stattrak, souvenir, stickers_json,
        icon_url, acquired_at
      ) VALUES (
-       @assetId, @marketHashName, @baseName, @category, @wearName,
+       @userId, @assetId, @marketHashName, @baseName, @category, @wearName,
        @floatValue, @paintSeed, @statTrak, @souvenir, @stickersJson,
        @iconUrl, @acquiredAt
      )
-     ON CONFLICT(asset_id) DO UPDATE SET
+     ON CONFLICT(user_id, asset_id) DO UPDATE SET
        market_hash_name = excluded.market_hash_name,
        base_name        = excluded.base_name,
        category         = excluded.category,
@@ -83,17 +79,18 @@ export function upsertItems(items: CanonicalItem[]): void {
        acquired_at      = excluded.acquired_at,
        updated_at       = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
   );
-  const deleteStmt = db.prepare('DELETE FROM items WHERE asset_id = ?');
-  const selectIds = db.prepare('SELECT asset_id FROM items');
+  const deleteStmt = db.prepare('DELETE FROM items WHERE user_id = ? AND asset_id = ?');
+  const selectIds = db.prepare('SELECT asset_id FROM items WHERE user_id = ?');
 
   const run = db.transaction((next: CanonicalItem[]) => {
     const keep = new Set(next.map((i) => i.assetId));
-    const existing = selectIds.all() as Array<{ asset_id: string }>;
+    const existing = selectIds.all(userId) as Array<{ asset_id: string }>;
     for (const row of existing) {
-      if (!keep.has(row.asset_id)) deleteStmt.run(row.asset_id);
+      if (!keep.has(row.asset_id)) deleteStmt.run(userId, row.asset_id);
     }
     for (const item of next) {
       upsert.run({
+        userId,
         assetId: item.assetId,
         marketHashName: item.marketHashName,
         baseName: item.baseName,
@@ -112,24 +109,32 @@ export function upsertItems(items: CanonicalItem[]): void {
   run(items);
 }
 
-export function getItems(): CanonicalItem[] {
+export function getItems(userId: number): CanonicalItem[] {
   const rows = db
-    .prepare(`SELECT ${SELECT_COLUMNS} FROM items ORDER BY market_hash_name, asset_id`)
-    .all() as ItemRow[];
+    .prepare(
+      `SELECT ${SELECT_COLUMNS}
+       FROM items
+       WHERE user_id = ?
+       ORDER BY market_hash_name, asset_id`,
+    )
+    .all(userId) as ItemRow[];
   return rows.map(rowToItem);
 }
 
-export function getItem(assetId: string): CanonicalItem | null {
+export function getItem(userId: number, assetId: string): CanonicalItem | null {
   const row = db
-    .prepare(`SELECT ${SELECT_COLUMNS} FROM items WHERE asset_id = ?`)
-    .get(assetId) as ItemRow | undefined;
+    .prepare(
+      `SELECT ${SELECT_COLUMNS}
+       FROM items
+       WHERE user_id = ? AND asset_id = ?`,
+    )
+    .get(userId, assetId) as ItemRow | undefined;
   return row ? rowToItem(row) : null;
 }
 
-/** All items joined with their cost basis (null when not yet estimable). */
-export function getPositions(): Position[] {
-  const basisByAsset = getAllCostBasis();
-  return getItems().map((item) => ({
+export function getPositions(userId: number): Position[] {
+  const basisByAsset = getAllCostBasis(userId);
+  return getItems(userId).map((item) => ({
     item,
     costBasis: basisByAsset.get(item.assetId) ?? null,
   }));

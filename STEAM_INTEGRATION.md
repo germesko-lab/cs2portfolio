@@ -49,14 +49,15 @@ documentation (July 2026). No private/internal implementations were examined.
 1. **"Sign in through Steam"** — proper OpenID 2.0 `checkid_setup` redirect +
    server-side `check_authentication` verification (plus claimed-id shape,
    return-URL, signed-fields and one-time-nonce checks), yielding the
-   SteamID64 and a lightweight signed session cookie. Implemented by hand in
-   `src/lib/server/steam-auth.ts` (~150 lines): the flow is two HTTP
-   round-trips, and the popular npm OpenID libraries are unmaintained and
-   pull in far more surface than this needs.
+   SteamID64, a persisted user row and an opaque 30-day session cookie backed
+   by the SQLite `sessions` table. Implemented by hand in
+   `src/lib/server/steam-auth.ts`: the flow is two HTTP round-trips, and the
+   popular npm OpenID libraries are unmaintained and pull in far more surface
+   than this needs.
 2. **Public inventory read** — unchanged existing pipeline
    (resolve → paginated fetch → normalize → persist → valuation), used both
    by the signed-in flow and by **manual entry** (profile URL / SteamID64 /
-   trade link), which stays for users who don't want to sign in.
+   trade link) inside the signed-in user's isolated portfolio.
 3. **Rate-limit respect** — per-SteamID64 cache (5 min TTL) + cooldown after
    a 429 (existing `inventory-cache.ts`); sync only on explicit user action.
 4. **No Steam Market price scraping** — prices remain on the `PriceSource`

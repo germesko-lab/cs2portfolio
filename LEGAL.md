@@ -31,9 +31,9 @@ exposes data the user has already made public.
   scripts to collect Steam site data (scraping). **Decision: Steam Market is
   not a price source in this app.** Steam prices, where users want them, come
   indirectly via aggregators (CSGOSKINS.GG) that license/aggregate them.
-- MVP defaults to a bundled realistic **fixture** of the inventory response
-  (`PRICE_SOURCE_MODE=mock` / no `STEAM_ID` set), so nothing hits Valve
-  during development.
+- The bundled realistic inventory fixture is available through **Load demo**
+  after sign-in. Development can also set `PRICE_SOURCE_MODE=mock` for
+  deterministic offline prices.
 
 ## CSFloat — primary price/listings source
 

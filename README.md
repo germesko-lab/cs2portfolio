@@ -1,14 +1,14 @@
 # CS2 Portfolio Tracker (MVP)
 
-A portfolio tracker for CS2 skins, modeled on stock/crypto portfolio apps —
+A portfolio tracker for CS2 skins, modeled on stock/crypto portfolio apps,
 not a marketplace. Connect a Steam inventory, pull prices from multiple
-sources, and see current value, invested (cost basis), per-position and total
-unrealized P/L, top gainers/losers, category allocation, best marketplace
-price per item, and a daily portfolio-value history.
+sources, and see current value, invested cost basis, unrealized P/L, top
+gainers/losers, category allocation, best marketplace price per item, and a
+daily portfolio-value history.
 
-**Runs fully end-to-end on realistic mock data with zero API keys** — that is
-the default mode. Real integrations are implemented against the real API
-shapes and activate when keys are provided (see below).
+The MVP runs with zero API keys: Steam login creates a persistent 30-day
+session, Skinport provides keyless real prices by default, and
+`PRICE_SOURCE_MODE=mock` is available for deterministic offline/demo prices.
 
 ## Run it
 
@@ -17,148 +17,129 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-First load auto-syncs the bundled 30-item inventory fixture, auto-estimates
-cost bases, backfills 30 days of portfolio history, and renders the dashboard.
+Sign in through Steam first. The app then auto-syncs your public inventory,
+auto-estimates cost bases, records portfolio snapshots, and renders your
+isolated dashboard.
 
-## Connect your Steam account
+## Connect Your Steam Account
 
-Two ways, mirroring how CSFloat-class sites do it (research + official-docs
-summary in [`STEAM_INTEGRATION.md`](STEAM_INTEGRATION.md)):
+1. **Sign in through Steam** - one click; a proper OpenID 2.0 flow verified
+   server-side (`src/lib/server/steam-auth.ts`). The SteamID64 is saved as a
+   user, an opaque 30-day session cookie is backed by the SQLite `sessions`
+   table, and the app auto-syncs your inventory. Steam OpenID authenticates
+   identity only: your inventory must still be Public.
+2. **Manual sync input** - after signing in, paste a profile URL, raw
+   SteamID64, trade offer URL, or vanity `/id/{name}` URL and hit **Sync from
+   link**. Vanity names require `STEAM_API_KEY`; numeric/profile/trade links
+   do not.
 
-1. **Sign in through Steam** — one click; a proper OpenID 2.0 flow verified
-   server-side (`src/lib/server/steam-auth.ts`) that yields your SteamID64,
-   sets a signed session cookie and auto-syncs your inventory. Steam OpenID
-   authenticates identity only — your inventory must still be Public
-   (Steam → Edit Profile → Privacy Settings → **Inventory** → Public).
-2. **Manual entry** — paste any of these into the dashboard field and hit
-   **Sync from link** (same Public-inventory requirement):
+The inventory fetch uses the public Steam Community inventory endpoint with
+pagination, a short-TTL cache per account, and cooldown handling for Steam
+429s. **Load demo** loads the bundled fixture into the signed-in user's
+isolated portfolio.
 
-- profile URL — `steamcommunity.com/profiles/{steamid64}`
-- custom profile URL — `steamcommunity.com/id/{name}` (requires
-  `STEAM_API_KEY`, see below; all other forms work without any key)
-- raw 17-digit SteamID64
-- trade offer URL — `…/tradeoffer/new/?partner={id}&token=…`
+Prices work with zero keys via Skinport's official public API. A
+`CSFLOAT_API_KEY` adds CSFloat quotes on top; best price is the highest quote
+across configured sources. `PRICE_SOURCE_MODE=mock` switches to deterministic
+offline prices.
 
-The fetch uses the official public inventory endpoint with pagination, a
-short-TTL cache per account and a cooldown on Steam 429s (LEGAL.md). **Load
-demo** restores the bundled fixture at any time, so the app always runs with
-zero external calls. Prices: **real prices work with zero keys** via
-Skinport's official public API; a `CSFLOAT_API_KEY` adds CSFloat quotes on
-top (best price = highest across sources). Items no marketplace sells
-(untradable coins, medals) honestly stay "missing". `PRICE_SOURCE_MODE=mock`
-switches to the deterministic offline demo prices.
-`npm run build && npm start` for production mode; `npm run typecheck` for TS.
-The SQLite database lives in `data/portfolio.db` (auto-created/migrated on
-boot; delete it to reset).
+## Deploy
 
-## Deploy (personal use)
-
-The app is a single container with SQLite on a volume — any Docker host works.
-
-**Any machine with Docker** (laptop, home server, VPS):
+The app is a single container with SQLite on a persistent volume.
 
 ```bash
-docker compose up -d --build   # http://localhost:3000, data persists in the cs2data volume
+docker compose up -d --build
 ```
 
-**Railway** (hosted, deploys straight from GitHub — `railway.json` +
-`Dockerfile` are picked up automatically):
+Railway uses `railway.json` + `Dockerfile`. Attach a volume at `/app/data` so
+`data/portfolio.db` survives deploys.
 
-1. railway.app → New Project → Deploy from GitHub repo → pick this repo and
-   branch `claude/cs2-portfolio-tracker-mvp-c2okst`.
-2. On the service: right-click (or Settings) → **Attach Volume**, mount path
-   `/app/data` — this persists the SQLite db across deploys.
-3. Settings → Networking → **Generate Domain**. Done — the app serves on the
-   injected `$PORT` automatically.
-
-**Fly.io** (hosted, HTTPS URL, free-tier friendly — machine sleeps when idle):
+Fly.io:
 
 ```bash
-flyctl launch --copy-config --no-deploy   # pick app name + region
+flyctl launch --copy-config --no-deploy
 flyctl volumes create cs2data --size 1
 flyctl deploy
-# later, with real keys:
-flyctl secrets set PRICE_SOURCE_MODE=live CSFLOAT_API_KEY=... STEAM_ID=...
+flyctl secrets set PRICE_SOURCE_MODE=auto CSFLOAT_API_KEY=...
 ```
 
-Notes: `next.config.mjs` uses `output: 'standalone'`; the image copies
-`db/migrations` (run at boot) and mounts `/app/data` for the SQLite file.
-Vercel/Netlify serverless is NOT supported as-is — the SQLite file needs a
-persistent disk (migrating to Turso/Postgres is on the production path).
+Vercel/Netlify serverless is not supported as-is because SQLite needs a
+persistent disk.
 
 ## Stack
 
-Next.js 15 (App Router) + TypeScript strict · SQLite via better-sqlite3 (raw
-SQL migrations in `db/migrations/`) · Recharts. Rationale for every decision:
-[`DECISIONS.md`](DECISIONS.md). Data-source terms: [`LEGAL.md`](LEGAL.md).
+Next.js 15 App Router + TypeScript strict, SQLite via `better-sqlite3`, raw
+SQL migrations, Recharts, npm. See `DECISIONS.md` and `LEGAL.md`.
 
 ## Architecture
 
-```
-src/lib/contracts/   FROZEN shared contracts: item model, PriceSource,
-                     valuation shapes, API DTOs, mock item universe
-src/lib/steam/       inventory fetch (real endpoint shape + fixture) + normalization
-src/lib/prices/      PriceSource adapters: csfloat, csgoskins, mock + cache/aggregation
-src/lib/valuation/   pure valuation/P&L engine, cost-basis CRUD, daily snapshots
-src/lib/server/      orchestration: sync, portfolio assembly, cost-basis ops
-src/app/api/         REST endpoints (see src/lib/contracts/api.ts for DTOs)
-src/app/ + components/  dashboard UI
+```text
+src/lib/contracts/      Shared contracts: item model, PriceSource, API DTOs
+src/lib/steam/          Inventory fetch, fixture, normalization
+src/lib/prices/         CSFloat, CSGOSKINS, Skinport, mock, cache/aggregation
+src/lib/valuation/      Pure valuation engine, cost basis, snapshots
+src/lib/server/         Auth/session + portfolio orchestration
+src/app/api/            REST endpoints
+src/app/ + components/  Dashboard UI
 ```
 
-API: `POST /api/inventory/sync` · `GET /api/portfolio` ·
-`POST /api/prices/refresh` · `GET /api/history?days=N` ·
+API: `POST /api/inventory/sync`, `GET /api/portfolio`,
+`POST /api/prices/refresh`, `GET /api/history?days=N`,
 `PATCH|DELETE /api/positions/{assetId}/cost-basis`.
 
-## Where every REAL_KEY_REQUIRED lives
+## Multi-user Data Isolation
 
-Search the repo for `REAL_KEY_REQUIRED`. Injection points (all read from env,
-see `.env.example`):
+Steam login is the primary auth method. Each SteamID maps to `users.id`, and
+the browser cookie contains only an opaque random token. Its SHA-256 hash,
+`user_id`, and 30-day expiry live in `sessions`; logout deletes the current
+session row and clears the cookie.
 
-| Env var | File | What it unlocks |
-|---|---|---|
-| `CSFLOAT_API_KEY` | `src/lib/prices/csfloat.ts` | Live CSFloat listings prices (primary source) |
-| `CSGOSKINS_API_KEY` | `src/lib/prices/csgoskins.ts` | Cross-market aggregated prices (partner API) |
-| `STEAM_API_KEY` | `src/lib/steam/resolve.ts` | Resolving vanity `/id/{name}` URLs (steamcommunity.com/dev/apikey); other input forms never need it. `STEAM_WEB_API_KEY` is a legacy alias |
-| `STEAM_ID` | `src/app/api/inventory/sync/route.ts` | Optional default account synced when no input is given |
-| `APP_BASE_URL` | `src/lib/server/steam-auth.ts` | Public site URL for the OpenID realm/return URL. Optional: falls back to Railway's auto-injected `RAILWAY_PUBLIC_DOMAIN`, then the request origin |
-| `SESSION_SECRET` | `src/lib/server/steam-auth.ts` | Signs session cookies (`openssl rand -hex 32`). Optional: ephemeral secret generated when unset — sign-ins then reset on redeploy |
+Portfolio-owned data is keyed by `user_id`:
 
-Set `PRICE_SOURCE_MODE=live` to activate any source whose key is present;
-sources without keys are skipped gracefully and the app keeps working.
+- `items` - inventory, acquisition dates and item properties
+- `cost_basis` - automatic/manual entry prices
+- `portfolio_snapshots` - daily value history
+- `user_meta` - tracked Steam account and last sync timestamp
+- `item_notes` - user-specific notes for future UI/API work
 
-## Cost-basis model (hybrid)
+Market price caches (`price_quotes`, `price_history`) remain global because
+they are public market data, not private portfolio state.
 
-Each position gets an **auto** cost basis = market price on its acquisition
-date (from the price-history series; falls back to current price). Click any
-cost-basis cell in the UI to set a **manual** override; "Auto" reverts it.
-Unrealized P/L is `null` — never a fake 0 — when either the price or the basis
-is missing.
+## Env Vars
 
-## Intentionally out of MVP scope
+| Env var | What it unlocks |
+|---|---|
+| `CSFLOAT_API_KEY` | Live CSFloat listing prices |
+| `CSGOSKINS_API_KEY` | Cross-market aggregated prices |
+| `STEAM_API_KEY` | Vanity `/id/{name}` resolution only |
+| `APP_BASE_URL` | Public OpenID realm/return URL; Railway domain is auto-detected |
+| `PRICE_SOURCE_MODE=mock` | Deterministic offline prices |
 
-- Realized P/L / sales ledger (it's a tracker, not a trade journal)
-- Multi-user auth, multiple portfolios, multi-currency (USD cents only)
-- Float/paint-seed inspection for live inventories (fields exist; fixture
-  simulates them; live values need the inspect-link / CSFloat checker flow)
-- Steam Community Market prices (no public API; scraping prohibited — see
-  LEGAL.md)
-- Background price polling/schedulers (refresh is user-triggered)
+Unset/`auto` price mode uses real sources: Skinport keyless plus any keyed
+sources whose keys are present.
 
-## Ordered next steps to production
+## Cost-basis Model
 
-1. **CSFloat key**: create one (csfloat.com → profile → Developers), set
-   `CSFLOAT_API_KEY` + `PRICE_SOURCE_MODE=live`, verify quotes and tune the
-   adapter's rate limiting against real 429 behavior.
-2. **Live inventory**: set `STEAM_ID`, harden `src/lib/steam/client.ts`
-   against private profiles/429s, add retry-with-backoff and a sync cooldown.
-3. **Real price history**: persist daily quotes per item (table exists:
-   `price_history`) via a daily cron; switch auto cost-basis estimates and
-   backfill to real series.
-4. **CSGOSKINS.GG partner API** agreement → set `CSGOSKINS_API_KEY` for
-   cross-market best-price comparison; add per-source attribution per their
-   terms.
-5. **Float inspection**: enrich items via the CSFloat inspect API to fill
-   `floatValue`/`paintSeed` and price wear-sensitive items more precisely.
-6. Auth + multi-portfolio, snapshot cron, Docker/hosted deploy (SQLite file →
-   volume, or migrate to Postgres if multi-user), monitoring on adapter
-   failures.
+Each position gets an auto cost basis from the market price on its acquisition
+date when history exists, falling back to the current price. Users can set a
+manual override per asset; "Auto" reverts it. P/L is `null`, never fake zero,
+when either price or basis is missing.
+
+## Out Of Scope
+
+- Realized P/L / sales ledger
+- Multiple portfolios per user
+- Multi-currency
+- Live float/paint-seed inspection
+- Steam Community Market scraping
+- Background price polling/schedulers
+
+## Ordered Next Steps
+
+1. Tune CSFloat rate limiting against real 429 behavior.
+2. Harden live inventory sync around private profiles and Steam 429s.
+3. Persist real daily quote history and backfill cost-basis estimates from it.
+4. Add CSGOSKINS.GG partner API attribution if that source is enabled.
+5. Add float inspection via CSFloat inspect APIs.
+6. Add multiple portfolios per user and consider Postgres if usage grows
+   beyond the small SQLite MVP.

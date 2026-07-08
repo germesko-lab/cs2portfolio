@@ -5,8 +5,9 @@
  * Routes (Next.js App Router, all JSON):
  *   POST   /api/inventory/sync                 → SyncResponse
  *          body: { input?: string }             SteamID64 / profile URL /
- *          vanity URL / trade offer URL; omitted, empty or "demo" loads the
- *          bundled fixture. { steamId } is a legacy alias. Errors: 400
+ *          vanity URL / trade offer URL; omitted/empty syncs the signed-in
+ *          user's SteamID. "demo" loads the fixture into that user's
+ *          portfolio. { steamId } is a legacy alias. Errors: 400
  *          unrecognized input or vanity without STEAM_API_KEY, 403 private
  *          inventory, 404 unknown account, 429 Steam rate limit.
  *   GET    /api/portfolio                      → PortfolioResponse
@@ -18,8 +19,8 @@
  *          (reverts to auto estimate)
  *
  * Every route responds with the ApiResult envelope. Errors use proper HTTP
- * status codes (400 bad input, 404 unknown asset, 502 upstream failure,
- * 500 otherwise) AND the error envelope.
+ * status codes (401 auth required, 400 bad input, 404 unknown asset,
+ * 502 upstream failure, 500 otherwise) AND the error envelope.
  */
 import type { IsoTimestamp, SnapshotPoint } from './types';
 import type { PriceSourceId } from './pricing';

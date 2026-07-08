@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { errorEnvelope, refreshPrices } from '@/lib/server/portfolio-service';
+import { errorEnvelope, refreshPrices, requireUser } from '@/lib/server/portfolio-service';
 import type { ApiResult, RefreshResponse } from '@/lib/contracts/api';
 
-export async function POST(): Promise<NextResponse> {
+export async function POST(request: Request): Promise<NextResponse> {
   try {
-    const data = await refreshPrices();
+    const data = await refreshPrices(requireUser(request));
     const result: ApiResult<RefreshResponse> = { ok: true, data };
     return NextResponse.json(result);
   } catch (err) {

@@ -28,16 +28,12 @@ export default function Dashboard() {
   const [version, setVersion] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
-    // Sequential on purpose: loading the portfolio writes today's snapshot,
-    // which the history request must observe (matters right after an
-    // account switch clears the series).
     const p = await api<PortfolioResponse>('/api/portfolio');
     setPortfolio(p);
     setHistory(await api<HistoryResponse>('/api/history?days=30'));
   }, []);
 
   useEffect(() => {
-    // Surface OpenID redirect outcomes (?login=ok&synced=N / syncError / authError).
     const params = new URLSearchParams(window.location.search);
     const authError = params.get('authError');
     const syncError = params.get('syncError');
@@ -45,7 +41,7 @@ export default function Dashboard() {
     if (authError) setError(authError);
     else if (syncError) setError(syncError);
     else if (params.get('login') === 'ok') {
-      setNotice(synced ? `Signed in through Steam — synced ${synced} items.` : 'Signed in through Steam.');
+      setNotice(synced ? `Signed in through Steam - synced ${synced} items.` : 'Signed in through Steam.');
     }
     if ([...params.keys()].length > 0) window.history.replaceState(null, '', '/');
 
@@ -57,26 +53,27 @@ export default function Dashboard() {
       try {
         const session = await api<SessionResponse>('/api/auth/session');
         setAuthSteamId(session.steamId);
-        let p = await api<PortfolioResponse>('/api/portfolio');
-        if (p.valuation.totalPositions === 0 && session.steamId === null) {
-          await api<SyncResponse>('/api/inventory/sync', { method: 'POST', body: '{}' });
-          p = await api<PortfolioResponse>('/api/portfolio');
+        if (session.steamId === null) {
+          setPortfolio(null);
+          setHistory(null);
+          return;
         }
-        setPortfolio(p);
-        setHistory(await api<HistoryResponse>('/api/history?days=30'));
+        await loadAll();
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load portfolio.');
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [loadAll]);
 
   async function doLogout() {
     try {
       await api<{ signedOut: true }>('/api/auth/logout', { method: 'POST' });
       setAuthSteamId(null);
-      setNotice('Signed out. The dashboard still shows the last synced inventory.');
+      setPortfolio(null);
+      setHistory(null);
+      setNotice('Signed out.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sign-out failed.');
     }
@@ -90,11 +87,11 @@ export default function Dashboard() {
     try {
       const res = await api<SyncResponse>('/api/inventory/sync', {
         method: 'POST',
-        body: JSON.stringify(input === '' ? {} : { input }),
+        body: input === '' ? '{}' : JSON.stringify({ input }),
       });
       if (res.itemCount === 0) {
         setNotice(
-          `Steam account ${res.steamId} has an empty CS2 inventory — nothing to track yet.`,
+          `Steam account ${res.steamId} has an empty CS2 inventory - nothing to track yet.`,
         );
       } else if (res.source === 'fixture') {
         setNotice(`Loaded the bundled demo inventory (${res.itemCount} items).`);
@@ -136,7 +133,7 @@ export default function Dashboard() {
           {portfolio?.lastSyncAt && (
             <span className="dim topbar-sub">
               Inventory synced {fmtTimestamp(portfolio.lastSyncAt)}
-              {portfolio.steamId ? ` · Steam ID ${portfolio.steamId}` : ''}
+              {portfolio.steamId ? ` - Steam ID ${portfolio.steamId}` : ''}
             </span>
           )}
         </div>
@@ -153,39 +150,39 @@ export default function Dashboard() {
               <button
                 className="btn btn-primary"
                 disabled={busy !== null}
-                onClick={() => void doSync(authSteamId)}
+                onClick={() => void doSync('')}
               >
-                {busy === 'sync' ? 'Syncing…' : 'Sync my inventory'}
+                {busy === 'sync' ? 'Syncing...' : 'Sync my inventory'}
+              </button>
+              <input
+                className="sync-input"
+                type="text"
+                placeholder="Steam profile URL, SteamID64 or trade offer link"
+                value={syncInput}
+                disabled={busy !== null}
+                onChange={(e) => setSyncInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && syncInput.trim() !== '') void doSync();
+                }}
+              />
+              <button
+                className="btn"
+                disabled={busy !== null || syncInput.trim() === ''}
+                onClick={() => void doSync()}
+              >
+                {busy === 'sync' ? 'Syncing...' : 'Sync from link'}
+              </button>
+              <button className="btn" disabled={busy !== null} onClick={() => void doSync('demo')}>
+                Load demo
+              </button>
+              <button className="btn" disabled={busy !== null} onClick={() => void doRefresh()}>
+                {busy === 'refresh' ? 'Refreshing...' : 'Refresh prices'}
               </button>
               <button className="btn" disabled={busy !== null} onClick={() => void doLogout()}>
                 Sign out
               </button>
             </>
           )}
-          <input
-            className="sync-input"
-            type="text"
-            placeholder="Steam profile URL, SteamID64 or trade offer link"
-            value={syncInput}
-            disabled={busy !== null}
-            onChange={(e) => setSyncInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && syncInput.trim() !== '') void doSync();
-            }}
-          />
-          <button
-            className={`btn ${authSteamId === null ? 'btn-primary' : ''}`}
-            disabled={busy !== null || syncInput.trim() === ''}
-            onClick={() => void doSync()}
-          >
-            {busy === 'sync' ? 'Syncing…' : 'Sync from link'}
-          </button>
-          <button className="btn" disabled={busy !== null} onClick={() => void doSync('')}>
-            Load demo
-          </button>
-          <button className="btn" disabled={busy !== null} onClick={() => void doRefresh()}>
-            {busy === 'refresh' ? 'Refreshing…' : 'Refresh prices'}
-          </button>
         </div>
       </header>
 
@@ -206,11 +203,22 @@ export default function Dashboard() {
         </div>
       )}
 
-      {loading || !portfolio ? (
+      {loading ? (
         <div className="skeleton-stack">
           <div className="skeleton" style={{ height: 96 }} />
           <div className="skeleton" style={{ height: 300 }} />
           <div className="skeleton" style={{ height: 240 }} />
+        </div>
+      ) : authSteamId === null ? (
+        <div className="panel signed-out-panel">
+          <h2 className="panel-title">Sign in required</h2>
+          <div className="empty-note">
+            Sign in through Steam to load your own isolated portfolio and keep a 30-day session.
+          </div>
+        </div>
+      ) : !portfolio ? (
+        <div className="panel">
+          <div className="empty-note">No portfolio loaded yet.</div>
         </div>
       ) : (
         <>
@@ -233,12 +241,12 @@ export default function Dashboard() {
             {portfolio.priceSources.map((s) => (
               <span key={s.id} className={`source-pill ${s.configured ? 'on' : 'off'}`}>
                 {s.displayName}
-                <em>{s.configured ? (s.requiresApiKey ? 'live' : 'mock') : 'no key'}</em>
+                <em>{s.configured ? (s.id === 'mock' ? 'mock' : 'live') : 'no key'}</em>
               </span>
             ))}
             <span className="dim">
               as of {fmtTimestamp(portfolio.valuation.asOf)}
-              {version ? ` · build ${version}` : ''}
+              {version ? ` - build ${version}` : ''}
             </span>
           </footer>
         </>

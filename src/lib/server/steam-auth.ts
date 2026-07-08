@@ -1,23 +1,14 @@
 /**
- * Steam OpenID 2.0 "Sign in through Steam" + lightweight signed sessions.
+ * Steam OpenID 2.0 login + persistent DB-backed sessions.
  *
- * Flow (partner.steamgames.com/doc/features/auth, OpenID 2.0 spec):
- *   1. buildLoginRedirectUrl(): send the user to
- *      https://steamcommunity.com/openid/login with checkid_setup params.
- *   2. Steam redirects back to {base}/api/auth/steam/return with a signed
- *      positive assertion (mode=id_res).
- *   3. verifyOpenIdReturn(): validate shape (ns / mode / return_to /
- *      claimed_id pattern / signed fields / one-time nonce), then perform
- *      OpenID §11.4.2 direct verification — POST the assertion back with
- *      openid.mode=check_authentication; Steam answers is_valid:true.
- *
- * Steam OpenID authenticates IDENTITY ONLY — it never grants access to a
- * private inventory (STEAM_INTEGRATION.md). The session is a signed cookie
- * value "steamid.expiry.hmac" — no server-side session store needed.
+ * Steam OpenID proves identity only. It does not grant access to private
+ * inventories, so inventory sync still uses the public inventory endpoint.
+ * The browser cookie contains only an opaque random token; users and session
+ * expiry live in SQLite so logout can invalidate the current session.
  */
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { db } from '../db';
 
-/** Same override the inventory client uses — lets tests replay Steam locally. */
 const COMMUNITY_BASE = process.env.STEAM_COMMUNITY_BASE_URL ?? 'https://steamcommunity.com';
 const OPENID_ENDPOINT = `${COMMUNITY_BASE}/openid/login`;
 const OPENID_NS = 'http://specs.openid.net/auth/2.0';
@@ -25,10 +16,10 @@ const IDENTIFIER_SELECT = 'http://specs.openid.net/auth/2.0/identifier_select';
 export const RETURN_PATH = '/api/auth/steam/return';
 
 export type SteamAuthErrorCode =
-  | 'BAD_ASSERTION' // malformed/incomplete OpenID response
-  | 'REPLAYED' // response_nonce seen before
-  | 'INVALID_SIGNATURE' // Steam's check_authentication said is_valid:false
-  | 'NETWORK'; // verification round-trip failed
+  | 'BAD_ASSERTION'
+  | 'REPLAYED'
+  | 'INVALID_SIGNATURE'
+  | 'NETWORK';
 
 export class SteamAuthError extends Error {
   readonly code: SteamAuthErrorCode;
@@ -39,15 +30,6 @@ export class SteamAuthError extends Error {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Base URL — the OpenID realm/return_to must be the site's public URL */
-/* ------------------------------------------------------------------ */
-
-/**
- * Priority: APP_BASE_URL env (canonical) → RAILWAY_PUBLIC_DOMAIN (injected by
- * Railway automatically) → the request's own forwarded origin (fine for a
- * personal deployment; set APP_BASE_URL to pin it down hard).
- */
 export function resolveBaseUrl(req: Request): string {
   const fromEnv = process.env.APP_BASE_URL;
   if (fromEnv) return fromEnv.replace(/\/+$/, '');
@@ -58,10 +40,6 @@ export function resolveBaseUrl(req: Request): string {
   const host = req.headers.get('x-forwarded-host')?.split(',')[0]?.trim() || req.headers.get('host') || url.host;
   return `${proto}://${host}`;
 }
-
-/* ------------------------------------------------------------------ */
-/* OpenID login redirect                                               */
-/* ------------------------------------------------------------------ */
 
 export function buildLoginRedirectUrl(baseUrl: string): string {
   const params = new URLSearchParams({
@@ -75,14 +53,10 @@ export function buildLoginRedirectUrl(baseUrl: string): string {
   return `${OPENID_ENDPOINT}?${params}`;
 }
 
-/* ------------------------------------------------------------------ */
-/* Assertion verification                                              */
-/* ------------------------------------------------------------------ */
-
-/** One-time nonce cache (10 min window) to block assertion replays. */
 declare global {
   var __cs2SeenNonces: Map<string, number> | undefined;
 }
+
 const seenNonces: Map<string, number> =
   globalThis.__cs2SeenNonces ?? (globalThis.__cs2SeenNonces = new Map());
 const NONCE_TTL_MS = 10 * 60_000;
@@ -95,23 +69,22 @@ function nonceIsFresh(nonce: string): boolean {
   return true;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const claimedIdPattern = new RegExp(
-  `^${COMMUNITY_BASE.replace(/^https?/, 'https?').replace(/[.*+?^${}()|[\]\\]/g, (ch) => (ch === '?' ? ch : `\\${ch}`))}/openid/id/(\\d{17})$`,
+  `^${escapeRegExp(COMMUNITY_BASE).replace(/^https?/, 'https?')}/openid/id/(\\d{17})$`,
 );
 
-/**
- * Verify a positive assertion from Steam and return the SteamID64.
- * `query` is the full query string of the return request.
- */
 export async function verifyOpenIdReturn(query: URLSearchParams, baseUrl: string): Promise<string> {
   const get = (k: string) => query.get(`openid.${k}`);
 
   if (get('ns') !== OPENID_NS || get('mode') !== 'id_res') {
     throw new SteamAuthError('BAD_ASSERTION', 'Steam sign-in was cancelled or returned an unexpected response.');
   }
-  const returnTo = get('return_to') ?? '';
-  if (returnTo !== `${baseUrl}${RETURN_PATH}`) {
-    throw new SteamAuthError('BAD_ASSERTION', 'Sign-in return URL mismatch — is APP_BASE_URL configured correctly?');
+  if ((get('return_to') ?? '') !== `${baseUrl}${RETURN_PATH}`) {
+    throw new SteamAuthError('BAD_ASSERTION', 'Sign-in return URL mismatch. Check APP_BASE_URL.');
   }
   const claimed = get('claimed_id') ?? '';
   const match = claimed.match(claimedIdPattern);
@@ -129,8 +102,6 @@ export async function verifyOpenIdReturn(query: URLSearchParams, baseUrl: string
     throw new SteamAuthError('REPLAYED', 'This Steam sign-in response was already used. Try signing in again.');
   }
 
-  // OpenID 2.0 §11.4.2 direct verification: echo every openid.* param back
-  // with mode=check_authentication; Steam validates its own signature.
   const body = new URLSearchParams();
   for (const [key, value] of query) if (key.startsWith('openid.')) body.set(key, value);
   body.set('openid.mode', 'check_authentication');
@@ -158,37 +129,80 @@ export async function verifyOpenIdReturn(query: URLSearchParams, baseUrl: string
   return match[1]!;
 }
 
-/* ------------------------------------------------------------------ */
-/* Session cookie (HMAC-signed, stateless)                             */
-/* ------------------------------------------------------------------ */
-
 export const SESSION_COOKIE = 'cs2_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
 
-declare global {
-  var __cs2SessionSecret: string | undefined;
+export interface AuthenticatedUser {
+  id: number;
+  steamId: string;
 }
 
-function sessionSecret(): string {
-  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
-  // Ephemeral fallback so the app runs with zero config; sessions then die on
-  // restart/redeploy. Set SESSION_SECRET for persistent sign-ins.
-  if (!globalThis.__cs2SessionSecret) {
-    globalThis.__cs2SessionSecret = randomBytes(32).toString('hex');
-    console.warn('[steam-auth] SESSION_SECRET is not set — using an ephemeral secret; sign-ins reset on restart.');
-  }
-  return globalThis.__cs2SessionSecret;
+interface UserRow {
+  id: number;
+  steam_id: string;
 }
 
-function sign(payload: string): string {
-  return createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
+interface SessionRow {
+  id: number;
+  steam_id: string;
+  expires_at: string;
 }
 
-/** Serialized Set-Cookie value establishing the session. */
-export function createSessionCookie(steamId64: string, secure: boolean): string {
-  const expires = Date.now() + SESSION_TTL_MS;
-  const payload = `${steamId64}.${expires}`;
-  const value = `${payload}.${sign(payload)}`;
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function expiresIso(): string {
+  return new Date(Date.now() + SESSION_TTL_MS).toISOString();
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function rawSessionToken(cookieHeader: string | null): string | null {
+  if (!cookieHeader) return null;
+  return (
+    cookieHeader
+      .split(';')
+      .map((c) => c.trim())
+      .find((c) => c.startsWith(`${SESSION_COOKIE}=`))
+      ?.slice(SESSION_COOKIE.length + 1) ?? null
+  );
+}
+
+function cleanupExpiredSessions(): void {
+  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(nowIso());
+}
+
+export function upsertUserFromSteam(steamId64: string): AuthenticatedUser {
+  const ts = nowIso();
+  db.prepare(
+    `INSERT INTO users (steam_id, last_login_at, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(steam_id) DO UPDATE SET
+       last_login_at = excluded.last_login_at,
+       updated_at    = excluded.updated_at`,
+  ).run(steamId64, ts, ts);
+  const row = db.prepare('SELECT id, steam_id FROM users WHERE steam_id = ?').get(steamId64) as
+    | UserRow
+    | undefined;
+  if (!row) throw new Error('Failed to load user after Steam sign-in.');
+  return { id: row.id, steamId: row.steam_id };
+}
+
+function createSessionToken(userId: number): string {
+  cleanupExpiredSessions();
+  const token = randomBytes(32).toString('base64url');
+  db.prepare(
+    `INSERT INTO sessions (session_hash, user_id, expires_at)
+     VALUES (?, ?, ?)`,
+  ).run(hashToken(token), userId, expiresIso());
+  return token;
+}
+
+export function createSessionCookie(userId: number, secure: boolean): string {
+  const value = createSessionToken(userId);
   return [
     `${SESSION_COOKIE}=${value}`,
     'Path=/',
@@ -203,24 +217,33 @@ export function clearSessionCookie(): string {
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-/** SteamID64 from a valid, unexpired session cookie — else null. */
-export function readSession(cookieHeader: string | null): string | null {
-  if (!cookieHeader) return null;
-  const raw = cookieHeader
-    .split(';')
-    .map((c) => c.trim())
-    .find((c) => c.startsWith(`${SESSION_COOKIE}=`))
-    ?.slice(SESSION_COOKIE.length + 1);
-  if (!raw) return null;
-  const parts = raw.split('.');
-  if (parts.length !== 3) return null;
-  const [steamId, expiresStr, mac] = parts as [string, string, string];
-  if (!/^\d{17}$/.test(steamId)) return null;
-  const expires = Number(expiresStr);
-  if (!Number.isFinite(expires) || expires < Date.now()) return null;
-  const expected = sign(`${steamId}.${expiresStr}`);
-  const a = Buffer.from(mac);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-  return steamId;
+export function readSession(cookieHeader: string | null): AuthenticatedUser | null {
+  const token = rawSessionToken(cookieHeader);
+  if (!token) return null;
+  const hash = hashToken(token);
+  const row = db
+    .prepare(
+      `SELECT u.id, u.steam_id, s.expires_at
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       WHERE s.session_hash = ?`,
+    )
+    .get(hash) as SessionRow | undefined;
+  if (!row) return null;
+  if (row.expires_at <= nowIso()) {
+    db.prepare('DELETE FROM sessions WHERE session_hash = ?').run(hash);
+    return null;
+  }
+  db.prepare(
+    `UPDATE sessions
+     SET last_seen_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+     WHERE session_hash = ?`,
+  ).run(hash);
+  return { id: row.id, steamId: row.steam_id };
+}
+
+export function deleteSession(cookieHeader: string | null): void {
+  const token = rawSessionToken(cookieHeader);
+  if (!token) return;
+  db.prepare('DELETE FROM sessions WHERE session_hash = ?').run(hashToken(token));
 }

@@ -3,6 +3,7 @@ import {
   createSessionCookie,
   resolveBaseUrl,
   SteamAuthError,
+  upsertUserFromSteam,
   verifyOpenIdReturn,
 } from '@/lib/server/steam-auth';
 import { syncInventory, ApiError } from '@/lib/server/portfolio-service';
@@ -10,12 +11,8 @@ import { syncInventory, ApiError } from '@/lib/server/portfolio-service';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/auth/steam/return — Steam redirects here after sign-in. Verify the
- * OpenID assertion, establish the session, then immediately try to sync the
- * user's public inventory so the dashboard is populated on landing. A private
- * inventory is NOT a failed login: the session is still created and the exact
- * privacy-setting fix is surfaced as a banner (STEAM_INTEGRATION.md — OpenID
- * proves identity only, it cannot unlock a private inventory).
+ * GET /api/auth/steam/return - verify Steam OpenID, upsert the user, create a
+ * persistent 30-day session, then try to sync that user's public inventory.
  */
 export async function GET(request: Request): Promise<NextResponse> {
   const base = resolveBaseUrl(request);
@@ -30,9 +27,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.redirect(`${base}/?authError=${encodeURIComponent(message)}`, 302);
   }
 
+  const user = upsertUserFromSteam(steamId);
   let target = `${base}/?login=ok`;
   try {
-    const sync = await syncInventory(steamId);
+    const sync = await syncInventory(user, steamId);
     target = `${base}/?login=ok&synced=${sync.itemCount}`;
   } catch (err) {
     const message =
@@ -43,6 +41,6 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   const res = NextResponse.redirect(target, 302);
-  res.headers.set('Set-Cookie', createSessionCookie(steamId, base.startsWith('https://')));
+  res.headers.set('Set-Cookie', createSessionCookie(user.id, base.startsWith('https://')));
   return res;
 }

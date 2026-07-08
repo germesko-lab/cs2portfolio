@@ -1,8 +1,7 @@
 /**
  * Bundled inventory fixture in the EXACT raw Steam response shape
- * (RawInventoryResponse). This is what the app runs on by default
- * (PRICE_SOURCE_MODE=mock / no STEAM_ID), so nothing hits Valve during
- * development — see LEGAL.md.
+ * (RawInventoryResponse). Signed-in users can load it via "Load demo";
+ * pair it with PRICE_SOURCE_MODE=mock for fully offline development.
  *
  * Every marketHashName comes strictly from the frozen MOCK_UNIVERSE so the
  * mock price source can price it — with ONE deliberate exception:

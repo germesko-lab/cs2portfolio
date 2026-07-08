@@ -89,3 +89,19 @@ export function setMeta(key: string, value: string): void {
     'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
   ).run(key, value);
 }
+
+export function getUserMeta(userId: number, key: string): string | null {
+  const row = db.prepare('SELECT value FROM user_meta WHERE user_id = ? AND key = ?').get(
+    userId,
+    key,
+  ) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+export function setUserMeta(userId: number, key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO user_meta (user_id, key, value)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value`,
+  ).run(userId, key, value);
+}
