@@ -3,6 +3,12 @@
 # Run:    docker run -p 3000:3000 -v cs2data:/app/data cs2portfolio
 FROM node:22-slim AS deps
 WORKDIR /app
+# Toolchain for better-sqlite3's node-gyp fallback: its prebuilt-binary
+# download can time out on CI builders (seen on Railway), and slim images
+# ship no python3/make/g++. Builder-stage only — not in the final image.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
