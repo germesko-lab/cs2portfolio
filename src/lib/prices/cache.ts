@@ -50,6 +50,8 @@ function sourceDisplayName(id: PriceSourceId): string {
       return 'CSFloat';
     case 'csgoskins':
       return 'CSGOSKINS.GG';
+    case 'skinport':
+      return 'Skinport';
     case 'mock':
       return 'Mock Market Data';
   }

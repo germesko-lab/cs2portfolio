@@ -10,7 +10,8 @@ primary_region = 'waw'
 [build]
 
 [env]
-  PRICE_SOURCE_MODE = 'mock'
+  # 'auto' = real prices (Skinport keyless; CSFloat/CSGOSKINS when keys set).
+  PRICE_SOURCE_MODE = 'auto'
 
 [[mounts]]
   source = 'cs2data'

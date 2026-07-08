@@ -8,8 +8,10 @@
  *   SQLite quote cache (older fetchedAt signals staleness downstream);
  *   items nothing can price are simply omitted. Nothing here throws to
  *   callers.
- * - With no API keys (default PRICE_SOURCE_MODE=mock) the deterministic
- *   mock source is the only configured one, so the app always works.
+ * - Modes: default ('auto') = real sources — Skinport needs no key, CSFloat/
+ *   CSGOSKINS activate when their keys are set. PRICE_SOURCE_MODE=mock =
+ *   deterministic mock only (offline demo/tests); real and mock sources are
+ *   never active together, so fabricated prices can't win a best-price race.
  */
 import type {
   BestPrice,
@@ -20,11 +22,12 @@ import type {
 } from '../contracts/pricing';
 import { csfloatSource } from './csfloat';
 import { csgoskinsSource } from './csgoskins';
+import { skinportSource } from './skinport';
 import { mockSource } from './mock';
 import { getCachedQuotes, getHistory, upsertHistory, upsertQuotes } from './cache';
 
 /** Registration order = tie-break order when two sources quote equal cents. */
-const SOURCES: readonly PriceSource[] = [csfloatSource, csgoskinsSource, mockSource];
+const SOURCES: readonly PriceSource[] = [csfloatSource, csgoskinsSource, skinportSource, mockSource];
 
 /** How many days of history to pull from a source when backfilling. */
 const HISTORY_BACKFILL_DAYS = 120;

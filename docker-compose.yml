@@ -6,8 +6,9 @@ services:
     volumes:
       - cs2data:/app/data
     environment:
-      # Flip to 'live' and add keys when you have them (see .env.example).
-      PRICE_SOURCE_MODE: ${PRICE_SOURCE_MODE:-mock}
+      # Default 'auto': real prices via Skinport (no key) + keyed sources.
+      # Set PRICE_SOURCE_MODE=mock for the offline demo (see .env.example).
+      PRICE_SOURCE_MODE: ${PRICE_SOURCE_MODE:-auto}
       CSFLOAT_API_KEY: ${CSFLOAT_API_KEY:-}
       CSGOSKINS_API_KEY: ${CSGOSKINS_API_KEY:-}
       STEAM_ID: ${STEAM_ID:-}

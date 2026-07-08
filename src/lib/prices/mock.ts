@@ -110,7 +110,9 @@ export const mockSource: PriceSource = {
   requiresApiKey: false,
 
   isConfigured(): boolean {
-    return true; // Always available; no key, no network.
+    // Only in explicit mock mode: real sources (Skinport keyless, CSFloat/
+    // CSGOSKINS with keys) must never compete with fabricated prices.
+    return process.env.PRICE_SOURCE_MODE === 'mock';
   },
 
   async getQuotes(marketHashNames: string[]): Promise<Map<string, PriceQuote>> {

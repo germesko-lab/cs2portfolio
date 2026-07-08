@@ -6,7 +6,7 @@
 import type { Cents, Currency, IsoDay, IsoTimestamp } from './types';
 
 /** Stable identifiers for the sources shipped in MVP. */
-export type PriceSourceId = 'csfloat' | 'csgoskins' | 'mock';
+export type PriceSourceId = 'csfloat' | 'csgoskins' | 'skinport' | 'mock';
 
 /** A single price observation for one item on one marketplace/source. */
 export interface PriceQuote {

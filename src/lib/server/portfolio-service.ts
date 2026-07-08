@@ -14,6 +14,7 @@ import {
   getAllCostBasis,
   upsertSnapshot,
   backfillSnapshots,
+  clearSnapshots,
 } from '../valuation';
 import { getMeta, setMeta } from '../db';
 import { getItem, getItems, getPositions, upsertItems } from './items-repo';
@@ -142,6 +143,14 @@ export async function syncInventory(input: string | null): Promise<SyncResponse>
   } catch (err) {
     throw toApiError(err);
   }
+
+  // A different account is a different portfolio — its value series must not
+  // continue the previous one (that reads as a fake cliff on the chart).
+  const previousSteamId = getMeta('steam_id');
+  if (previousSteamId !== null && previousSteamId !== steamId) {
+    clearSnapshots();
+  }
+
   upsertItems(items);
 
   const names = distinctNames(items);
@@ -195,9 +204,12 @@ export async function syncInventory(input: string | null): Promise<SyncResponse>
         const price = priceAtOrBefore(historyByName.get(item.marketHashName) ?? [], day);
         if (price !== null) totalValueCents += price;
       }
-      points.push({ day, totalValueCents, investedCents });
+      // Days no source has history for stay unwritten: a $0 backfill reads
+      // as a crash on the chart. With history-less sources (e.g. Skinport)
+      // the series honestly starts today and builds forward.
+      if (totalValueCents > 0) points.push({ day, totalValueCents, investedCents });
     }
-    backfillSnapshots(points);
+    if (points.length > 0) backfillSnapshots(points);
   }
 
   const syncedAt = new Date().toISOString();

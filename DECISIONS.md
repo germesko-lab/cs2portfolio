@@ -22,9 +22,12 @@ are FROZEN — all streams code against them; contracts win over any drift.
 
 ## Price sources
 - `PriceSource` adapter interface (frozen in `src/lib/contracts/pricing.ts`).
-  Adapters: **CSFloat** (primary, real request/response shapes from
-  docs.csfloat.com), **CSGOSKINS.GG** (official API shapes, cross-market
-  reference), **Mock** (deterministic realistic data so the app runs today).
+  Adapters: **CSFloat** (primary keyed source, real request/response shapes
+  from docs.csfloat.com), **CSGOSKINS.GG** (official API shapes, cross-market
+  reference), **Skinport** (official public API, NO key — this is what makes
+  real prices work out of the box), **Mock** (deterministic data for the
+  offline demo). Modes: default 'auto' = real sources only; 'mock' = mock
+  only — fabricated prices never compete with real ones.
 - No live API keys exist ⇒ real adapters detect a missing key via
   `isConfigured()` and are skipped by the aggregator; every injection point
   is labeled `// REAL_KEY_REQUIRED`. `PRICE_SOURCE_MODE=mock` (default) makes

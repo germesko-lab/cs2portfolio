@@ -118,7 +118,8 @@ export const csfloatSource: PriceSource = {
   requiresApiKey: true,
 
   isConfigured(): boolean {
-    return !!process.env.CSFLOAT_API_KEY && process.env.PRICE_SOURCE_MODE === 'live';
+    // Key presence is the gate; only explicit mock mode disables it.
+    return !!process.env.CSFLOAT_API_KEY && process.env.PRICE_SOURCE_MODE !== 'mock';
   },
 
   async getQuotes(marketHashNames: string[]): Promise<Map<string, PriceQuote>> {

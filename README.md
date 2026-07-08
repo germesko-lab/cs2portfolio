@@ -42,9 +42,11 @@ summary in [`STEAM_INTEGRATION.md`](STEAM_INTEGRATION.md)):
 The fetch uses the official public inventory endpoint with pagination, a
 short-TTL cache per account and a cooldown on Steam 429s (LEGAL.md). **Load
 demo** restores the bundled fixture at any time, so the app always runs with
-zero external calls. Note on prices: items are priced by the configured
-`PriceSource`s — without a `CSFLOAT_API_KEY`, only mock-universe (demo) items
-get prices and real inventory rows show "missing".
+zero external calls. Prices: **real prices work with zero keys** via
+Skinport's official public API; a `CSFLOAT_API_KEY` adds CSFloat quotes on
+top (best price = highest across sources). Items no marketplace sells
+(untradable coins, medals) honestly stay "missing". `PRICE_SOURCE_MODE=mock`
+switches to the deterministic offline demo prices.
 `npm run build && npm start` for production mode; `npm run typecheck` for TS.
 The SQLite database lives in `data/portfolio.db` (auto-created/migrated on
 boot; delete it to reset).

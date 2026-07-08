@@ -11,6 +11,11 @@ interface SnapshotRow {
   invested_cents: number;
 }
 
+/** Wipe the whole series — used when the tracked account changes. */
+export function clearSnapshots(): void {
+  db.prepare('DELETE FROM portfolio_snapshots').run();
+}
+
 /**
  * Idempotent per-day upsert: re-snapshotting the same day overwrites that
  * day's values, never creates a second row.

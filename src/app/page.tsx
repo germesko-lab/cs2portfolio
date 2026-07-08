@@ -27,12 +27,12 @@ export default function Dashboard() {
   const [authSteamId, setAuthSteamId] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
-    const [p, h] = await Promise.all([
-      api<PortfolioResponse>('/api/portfolio'),
-      api<HistoryResponse>('/api/history?days=30'),
-    ]);
+    // Sequential on purpose: loading the portfolio writes today's snapshot,
+    // which the history request must observe (matters right after an
+    // account switch clears the series).
+    const p = await api<PortfolioResponse>('/api/portfolio');
     setPortfolio(p);
-    setHistory(h);
+    setHistory(await api<HistoryResponse>('/api/history?days=30'));
   }, []);
 
   useEffect(() => {

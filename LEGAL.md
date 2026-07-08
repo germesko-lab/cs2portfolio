@@ -50,6 +50,16 @@ exposes data the user has already made public.
 - Usage here (reading listing prices to value a user's own inventory) is a
   normal API use case. No scraping of csfloat.com pages.
 
+## Skinport — keyless public pricing API
+
+- Official, documented public API (docs.skinport.com):
+  `GET https://api.skinport.com/v1/items?app_id=730&currency=USD` returns the
+  full item catalog with current prices. No API key or account required.
+- Documented rate limit (8 requests / 5 minutes per endpoint): the adapter
+  (`src/lib/prices/skinport.ts`) fetches the catalog at most once per
+  10 minutes, serves lookups from memory, and backs off on HTTP 429 serving
+  the stale snapshot. No scraping of skinport.com pages.
+
 ## CSGOSKINS.GG — cross-market aggregation reference
 
 - Terms explicitly **prohibit scraping** the website. **Decision: API only,
