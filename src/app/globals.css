@@ -122,6 +122,30 @@ a:hover {
   border: 1px solid rgba(248, 81, 73, 0.45);
   color: #ffb4ae;
 }
+.banner-info {
+  background: rgba(76, 141, 255, 0.1);
+  border: 1px solid rgba(76, 141, 255, 0.4);
+  color: #a5c8ff;
+}
+
+.sync-input {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  width: 340px;
+  max-width: 45vw;
+}
+.sync-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+.sync-input::placeholder {
+  color: var(--text-dim);
+}
 
 .skeleton-stack {
   display: flex;

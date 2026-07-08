@@ -19,6 +19,24 @@ npm run dev          # http://localhost:3000
 
 First load auto-syncs the bundled 30-item inventory fixture, auto-estimates
 cost bases, backfills 30 days of portfolio history, and renders the dashboard.
+
+## Sync your own inventory
+
+Paste any of these into the dashboard field and hit **Sync my inventory**
+(the Steam inventory must be set to Public in Steam privacy settings):
+
+- profile URL — `steamcommunity.com/profiles/{steamid64}`
+- custom profile URL — `steamcommunity.com/id/{name}` (requires
+  `STEAM_API_KEY`, see below; all other forms work without any key)
+- raw 17-digit SteamID64
+- trade offer URL — `…/tradeoffer/new/?partner={id}&token=…`
+
+The fetch uses the official public inventory endpoint with pagination, a
+short-TTL cache per account and a cooldown on Steam 429s (LEGAL.md). **Load
+demo** restores the bundled fixture at any time, so the app always runs with
+zero external calls. Note on prices: items are priced by the configured
+`PriceSource`s — without a `CSFLOAT_API_KEY`, only mock-universe (demo) items
+get prices and real inventory rows show "missing".
 `npm run build && npm start` for production mode; `npm run typecheck` for TS.
 The SQLite database lives in `data/portfolio.db` (auto-created/migrated on
 boot; delete it to reset).
@@ -90,8 +108,8 @@ see `.env.example`):
 |---|---|---|
 | `CSFLOAT_API_KEY` | `src/lib/prices/csfloat.ts` | Live CSFloat listings prices (primary source) |
 | `CSGOSKINS_API_KEY` | `src/lib/prices/csgoskins.ts` | Cross-market aggregated prices (partner API) |
-| `STEAM_ID` (+ `PRICE_SOURCE_MODE=live`) | `src/lib/steam/client.ts` | Live public-inventory fetch instead of the fixture |
-| `STEAM_WEB_API_KEY` | `src/lib/steam/client.ts` | (post-MVP) profile lookups via Steam Web API |
+| `STEAM_API_KEY` | `src/lib/steam/resolve.ts` | Resolving vanity `/id/{name}` URLs (steamcommunity.com/dev/apikey); other input forms never need it. `STEAM_WEB_API_KEY` is a legacy alias |
+| `STEAM_ID` | `src/app/api/inventory/sync/route.ts` | Optional default account synced when no input is given |
 
 Set `PRICE_SOURCE_MODE=live` to activate any source whose key is present;
 sources without keys are skipped gracefully and the app keeps working.

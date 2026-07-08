@@ -2,7 +2,7 @@
  * Stream D — portfolio orchestration. Glues steam (A), prices (B) and
  * valuation (C) behind the API routes. All money is integer cents (USD).
  */
-import { fetchInventory } from '../steam';
+import { fetchInventory, SteamInventoryError, SteamResolveError } from '../steam';
 import { priceService } from '../prices';
 import {
   valuePosition,
@@ -118,8 +118,30 @@ async function valueSinglePosition(item: CanonicalItem): Promise<PositionValuati
 /* Public service surface                                              */
 /* ------------------------------------------------------------------ */
 
-export async function syncInventory(steamIdInput: string | null): Promise<SyncResponse> {
-  const { steamId, items, source } = await fetchInventory(steamIdInput);
+/** Map typed steam-layer failures onto user-facing ApiError responses. */
+function toApiError(err: unknown): unknown {
+  if (err instanceof SteamResolveError) {
+    const status = err.code === 'NETWORK' || err.code === 'HTTP_ERROR' ? 502 : 400;
+    return new ApiError(status, err.code, err.message);
+  }
+  if (err instanceof SteamInventoryError) {
+    const status =
+      err.code === 'RATE_LIMITED' ? 429
+      : err.code === 'PRIVATE_INVENTORY' ? 403
+      : err.code === 'NOT_FOUND' ? 404
+      : 502;
+    return new ApiError(status, err.code, err.message);
+  }
+  return err;
+}
+
+export async function syncInventory(input: string | null): Promise<SyncResponse> {
+  let steamId: string, items: CanonicalItem[], source: 'fixture' | 'live';
+  try {
+    ({ steamId, items, source } = await fetchInventory(input));
+  } catch (err) {
+    throw toApiError(err);
+  }
   upsertItems(items);
 
   const names = distinctNames(items);

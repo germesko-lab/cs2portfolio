@@ -21,6 +21,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<'sync' | 'refresh' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [syncInput, setSyncInput] = useState('');
 
   const loadAll = useCallback(async () => {
     const [p, h] = await Promise.all([
@@ -49,11 +51,25 @@ export default function Dashboard() {
     })();
   }, []);
 
-  async function doSync() {
+  async function doSync(inputOverride?: string) {
+    const input = (inputOverride ?? syncInput).trim();
     setBusy('sync');
     setError(null);
+    setNotice(null);
     try {
-      await api<SyncResponse>('/api/inventory/sync', { method: 'POST', body: '{}' });
+      const res = await api<SyncResponse>('/api/inventory/sync', {
+        method: 'POST',
+        body: JSON.stringify(input === '' ? {} : { input }),
+      });
+      if (res.itemCount === 0) {
+        setNotice(
+          `Steam account ${res.steamId} has an empty CS2 inventory — nothing to track yet.`,
+        );
+      } else if (res.source === 'fixture') {
+        setNotice(`Loaded the bundled demo inventory (${res.itemCount} items).`);
+      } else {
+        setNotice(`Synced ${res.itemCount} items from Steam account ${res.steamId}.`);
+      }
       await loadAll();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sync failed.');
@@ -94,10 +110,28 @@ export default function Dashboard() {
           )}
         </div>
         <div className="topbar-actions">
-          <button className="btn" disabled={busy !== null} onClick={() => void doSync()}>
-            {busy === 'sync' ? 'Syncing…' : 'Sync inventory'}
+          <input
+            className="sync-input"
+            type="text"
+            placeholder="Steam profile URL, SteamID64 or trade offer link"
+            value={syncInput}
+            disabled={busy !== null}
+            onChange={(e) => setSyncInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && syncInput.trim() !== '') void doSync();
+            }}
+          />
+          <button
+            className="btn btn-primary"
+            disabled={busy !== null || syncInput.trim() === ''}
+            onClick={() => void doSync()}
+          >
+            {busy === 'sync' ? 'Syncing…' : 'Sync my inventory'}
           </button>
-          <button className="btn btn-primary" disabled={busy !== null} onClick={() => void doRefresh()}>
+          <button className="btn" disabled={busy !== null} onClick={() => void doSync('')}>
+            Load demo
+          </button>
+          <button className="btn" disabled={busy !== null} onClick={() => void doRefresh()}>
             {busy === 'refresh' ? 'Refreshing…' : 'Refresh prices'}
           </button>
         </div>
@@ -107,6 +141,14 @@ export default function Dashboard() {
         <div className="banner banner-error">
           <span>{error}</span>
           <button className="linklike" onClick={() => setError(null)}>
+            dismiss
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className="banner banner-info">
+          <span>{notice}</span>
+          <button className="linklike" onClick={() => setNotice(null)}>
             dismiss
           </button>
         </div>

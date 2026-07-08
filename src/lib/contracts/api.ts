@@ -4,6 +4,11 @@
  *
  * Routes (Next.js App Router, all JSON):
  *   POST   /api/inventory/sync                 → SyncResponse
+ *          body: { input?: string }             SteamID64 / profile URL /
+ *          vanity URL / trade offer URL; omitted, empty or "demo" loads the
+ *          bundled fixture. { steamId } is a legacy alias. Errors: 400
+ *          unrecognized input or vanity without STEAM_API_KEY, 403 private
+ *          inventory, 404 unknown account, 429 Steam rate limit.
  *   GET    /api/portfolio                      → PortfolioResponse
  *   POST   /api/prices/refresh                 → RefreshResponse
  *   GET    /api/history?days=N                 → HistoryResponse (default 30)

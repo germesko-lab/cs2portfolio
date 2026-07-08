@@ -36,7 +36,10 @@ export class SteamInventoryError extends Error {
   }
 }
 
-const BASE_URL = 'https://steamcommunity.com/inventory';
+/** Overridable for tests/proxies; defaults to the real Steam Community host. */
+const COMMUNITY_BASE = process.env.STEAM_COMMUNITY_BASE_URL ?? 'https://steamcommunity.com';
+const BASE_URL = `${COMMUNITY_BASE}/inventory`;
+const REQUEST_TIMEOUT_MS = 20_000;
 const APP_ID = 730; // CS2
 const CONTEXT_ID = 2;
 const PAGE_SIZE = 2000; // Steam's maximum per request
@@ -57,11 +60,15 @@ function pageUrl(steamId64: string, startAssetId: string | null): string {
 async function fetchPage(url: string): Promise<RawInventoryResponse> {
   let res: Response;
   try {
-    res = await fetch(url, { headers: { Accept: 'application/json' } });
+    res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
   } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
     throw new SteamInventoryError(
       'NETWORK',
-      `Network failure fetching Steam inventory: ${cause instanceof Error ? cause.message : String(cause)}`,
+      `Could not reach Steam (network error or timeout): ${detail}. Check connectivity and try again.`,
     );
   }
 

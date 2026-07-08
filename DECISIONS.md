@@ -50,6 +50,12 @@ are FROZEN — all streams code against them; contracts win over any drift.
   fields exist in the model).
 - Single-user, single portfolio. `STEAM_ID` comes from env or the sync call;
   no auth/multi-tenancy in MVP.
+- **Live inventory sync is independent of `PRICE_SOURCE_MODE`**: pasting a
+  profile link is an explicit user action, so it always fetches live (with
+  per-account caching + 429 cooldown), while `PRICE_SOURCE_MODE` keeps
+  governing only the price adapters. The "demo" input (or empty field)
+  restores the bundled fixture. Vanity `/id/` resolution needs
+  `STEAM_API_KEY`; every other input form works keyless.
 
 ## Cost basis (hybrid, per Product spec)
 - Per-asset cost basis. **Auto-estimate** = market price on the acquisition
