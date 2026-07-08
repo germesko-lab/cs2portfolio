@@ -14,7 +14,6 @@ import {
   getAllCostBasis,
   upsertSnapshot,
   backfillSnapshots,
-  getSnapshots,
 } from '../valuation';
 import { getMeta, setMeta } from '../db';
 import { getItem, getItems, getPositions, upsertItems } from './items-repo';
@@ -154,9 +153,11 @@ export async function syncInventory(steamIdInput: string | null): Promise<SyncRe
     }
   }
 
-  // First sync: backfill ~30 days of portfolio snapshots from item price
-  // history so the chart renders immediately. Never overwrites existing days.
-  if (items.length > 0 && getSnapshots(BACKFILL_DAYS).length === 0) {
+  // Backfill ~30 days of portfolio snapshots from item price history so the
+  // chart renders immediately. backfillSnapshots never overwrites existing
+  // days, so running on every sync is safe and fills gaps (e.g. when an
+  // empty-portfolio load snapshotted today before the first sync ran).
+  if (items.length > 0) {
     let investedCents = 0;
     for (const basis of getAllCostBasis().values()) investedCents += basis.amountCents;
 
