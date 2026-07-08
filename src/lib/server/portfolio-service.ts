@@ -153,12 +153,15 @@ export async function syncInventory(input: string | null): Promise<SyncResponse>
 
   upsertItems(items);
 
-  const names = distinctNames(items);
-
   // One history fetch per distinct name — reused for auto cost basis and
-  // the initial snapshot backfill.
+  // the initial snapshot backfill. Only names with a KNOWN acquisition date
+  // are worth a history lookup (live Steam data never has one, and per-name
+  // sources like CSFloat charge one request per item — a fresh 100-item
+  // sync must not fire 100 upstream calls); everything else auto-estimates
+  // from the current best price.
+  const namesWithAcquisition = distinctNames(items.filter((i) => i.acquiredAt !== null));
   const historyByName = new Map<string, PricePoint[]>();
-  for (const name of names) {
+  for (const name of namesWithAcquisition) {
     historyByName.set(name, await priceService.getPriceHistory(name, HISTORY_DAYS));
   }
 

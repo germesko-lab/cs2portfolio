@@ -32,6 +32,46 @@ const SOURCES: readonly PriceSource[] = [csfloatSource, csgoskinsSource, skinpor
 /** How many days of history to pull from a source when backfilling. */
 const HISTORY_BACKFILL_DAYS = 120;
 
+/**
+ * Per-source quote freshness: a cached quote younger than this satisfies a
+ * getBestPrices lookup without hitting the source again. Per-request sources
+ * (CSFloat: one HTTP call per item) get a long window so a dashboard load
+ * never fires N upstream requests; catalog/deterministic sources are free to
+ * serve every time (their own layers already cache).
+ */
+const QUOTE_TTL_MS: Record<string, number> = {
+  csfloat: 30 * 60_000,
+  csgoskins: 30 * 60_000,
+  skinport: 0,
+  mock: 0,
+};
+
+/** Cap on per-name history backfills per source within one refresh call. */
+const HISTORY_BACKFILL_CAP = 30;
+
+function quoteAgeMs(q: PriceQuote): number {
+  const t = Date.parse(q.fetchedAt);
+  return Number.isFinite(t) ? Date.now() - t : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Negative-result cache: names a source answered "no listings" for are not
+ * re-asked within the TTL (untradable coins/medals would otherwise cost one
+ * upstream request per source on EVERY dashboard load). In-memory; explicit
+ * refresh() bypasses it. Keyed "sourceId name".
+ */
+declare global {
+  var __cs2QuoteMisses: Map<string, number> | undefined;
+}
+const quoteMisses: Map<string, number> =
+  globalThis.__cs2QuoteMisses ?? (globalThis.__cs2QuoteMisses = new Map());
+const MISS_TTL_MS = 30 * 60_000;
+
+function isRecentMiss(sourceId: string, name: string): boolean {
+  const ts = quoteMisses.get(`${sourceId} ${name}`);
+  return ts !== undefined && Date.now() - ts <= MISS_TTL_MS;
+}
+
 function dedupe(names: string[]): string[] {
   return [...new Set(names)];
 }
@@ -74,47 +114,61 @@ export const priceService: PriceService = {
     const names = dedupe(marketHashNames);
     if (names.length === 0) return new Map();
 
-    // 1. Fresh quotes from every configured source (adapters never throw,
-    //    but guard anyway — a broken source must not sink the rest).
-    const quotesByName = new Map<string, PriceQuote[]>();
+    // 1. Cache first: one row per (name, source). A row younger than its
+    //    source's TTL satisfies the lookup — a dashboard load must never
+    //    fire N per-item requests at a keyed source (CSFloat).
+    const cachedBySourceName = new Map<string, PriceQuote>(); // "source name"
+    try {
+      for (const q of getCachedQuotes(names)) {
+        cachedBySourceName.set(`${q.sourceId} ${q.marketHashName}`, q);
+      }
+    } catch (err) {
+      console.warn('[prices] quote cache read failed:', err);
+    }
+
+    // 2. Ask each configured source only for names it has no fresh row for.
     const fresh: PriceQuote[] = [];
     for (const source of configuredSources()) {
+      const ttl = QUOTE_TTL_MS[source.id] ?? 0;
+      const needed = names.filter((n) => {
+        if (isRecentMiss(source.id, n)) return false;
+        const cached = cachedBySourceName.get(`${source.id} ${n}`);
+        return !cached || quoteAgeMs(cached) > ttl;
+      });
+      if (needed.length === 0) continue;
       try {
-        const quotes = await source.getQuotes(names);
-        for (const q of quotes.values()) {
-          fresh.push(q);
-          const list = quotesByName.get(q.marketHashName) ?? [];
-          list.push(q);
-          quotesByName.set(q.marketHashName, list);
+        const quotes = await source.getQuotes(needed);
+        for (const name of needed) {
+          const q = quotes.get(name);
+          if (q) {
+            fresh.push(q);
+            cachedBySourceName.set(`${q.sourceId} ${q.marketHashName}`, q);
+            quoteMisses.delete(`${source.id} ${name}`);
+          } else {
+            quoteMisses.set(`${source.id} ${name}`, Date.now());
+          }
         }
       } catch (err) {
         console.warn(`[prices] source ${source.id} getQuotes failed:`, err);
       }
     }
 
-    // 2. Persist fresh quotes into the cache.
+    // 3. Persist what was actually fetched.
     try {
       upsertQuotes(fresh);
     } catch (err) {
       console.warn('[prices] failed to upsert quote cache:', err);
     }
 
-    // 3. Names with no fresh quote fall back to cached rows; their older
-    //    fetchedAt marks them stale downstream (priceStatus: 'cached').
-    const missing = names.filter((n) => !quotesByName.has(n));
-    if (missing.length > 0) {
-      try {
-        for (const q of getCachedQuotes(missing)) {
-          const list = quotesByName.get(q.marketHashName) ?? [];
-          list.push(q);
-          quotesByName.set(q.marketHashName, list);
-        }
-      } catch (err) {
-        console.warn('[prices] quote cache read failed:', err);
-      }
+    // 4. Merge (fresh replaced their cached rows in the map already); stale
+    //    cached rows still count — their older fetchedAt marks them
+    //    'cached' downstream. Best = highest; unpriceable names omitted.
+    const quotesByName = new Map<string, PriceQuote[]>();
+    for (const q of cachedBySourceName.values()) {
+      const list = quotesByName.get(q.marketHashName) ?? [];
+      list.push(q);
+      quotesByName.set(q.marketHashName, list);
     }
-
-    // 4. Best = highest quote across sources; unpriceable names omitted.
     const result = new Map<string, BestPrice>();
     for (const name of names) {
       const quotes = quotesByName.get(name);
@@ -130,16 +184,26 @@ export const priceService: PriceService = {
     for (const source of configuredSources()) {
       counts[source.id] = 0;
       if (names.length === 0) continue;
+      // Explicit refresh bypasses (and resets) the negative-result cache.
+      for (const name of names) quoteMisses.delete(`${source.id} ${name}`);
       try {
         const quotes = await source.getQuotes(names);
         const list = [...quotes.values()];
         upsertQuotes(list);
         counts[source.id] = list.length;
-        // Best-effort history backfill for the items this source priced.
+        // Best-effort history backfill, capped and only for names with no
+        // persisted history yet — per-name sources (CSFloat) charge one
+        // request per item, and refresh must stay a bounded action.
+        let backfilled = 0;
         for (const name of quotes.keys()) {
+          if (backfilled >= HISTORY_BACKFILL_CAP) break;
           try {
+            if (getHistory(name, HISTORY_BACKFILL_DAYS).length > 0) continue;
             const points = await source.getPriceHistory(name, HISTORY_BACKFILL_DAYS);
-            if (points.length > 0) upsertHistory(name, source.id, points);
+            if (points.length > 0) {
+              upsertHistory(name, source.id, points);
+              backfilled++;
+            }
           } catch (err) {
             console.warn(`[prices] history backfill failed (${source.id}/${name}):`, err);
           }

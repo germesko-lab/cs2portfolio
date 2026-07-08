@@ -20,7 +20,8 @@
  */
 import type { PricePoint, PriceQuote, PriceSource } from '../contracts/pricing';
 
-const BASE_URL = 'https://csfloat.com/api/v1';
+/** Overridable for tests/proxies; defaults to the real CSFloat API host. */
+const BASE_URL = process.env.CSFLOAT_BASE_URL ?? 'https://csfloat.com/api/v1';
 const DISPLAY_NAME = 'CSFloat';
 /** Small pause between sequential per-name requests. */
 const REQUEST_DELAY_MS = 350;
