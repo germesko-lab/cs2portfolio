@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    volumes:
+      - cs2data:/app/data
+    environment:
+      # Flip to 'live' and add keys when you have them (see .env.example).
+      PRICE_SOURCE_MODE: ${PRICE_SOURCE_MODE:-mock}
+      CSFLOAT_API_KEY: ${CSFLOAT_API_KEY:-}
+      CSGOSKINS_API_KEY: ${CSGOSKINS_API_KEY:-}
+      STEAM_ID: ${STEAM_ID:-}
+    restart: unless-stopped
+
+volumes:
+  cs2data:

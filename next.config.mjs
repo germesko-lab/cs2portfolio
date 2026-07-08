@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Self-contained server bundle for Docker deploys (node .next/standalone/server.js).
+  output: 'standalone',
   serverExternalPackages: ['better-sqlite3'],
   images: {
     remotePatterns: [

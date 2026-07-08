@@ -23,6 +23,31 @@ cost bases, backfills 30 days of portfolio history, and renders the dashboard.
 The SQLite database lives in `data/portfolio.db` (auto-created/migrated on
 boot; delete it to reset).
 
+## Deploy (personal use)
+
+The app is a single container with SQLite on a volume — any Docker host works.
+
+**Any machine with Docker** (laptop, home server, VPS):
+
+```bash
+docker compose up -d --build   # http://localhost:3000, data persists in the cs2data volume
+```
+
+**Fly.io** (hosted, HTTPS URL, free-tier friendly — machine sleeps when idle):
+
+```bash
+flyctl launch --copy-config --no-deploy   # pick app name + region
+flyctl volumes create cs2data --size 1
+flyctl deploy
+# later, with real keys:
+flyctl secrets set PRICE_SOURCE_MODE=live CSFLOAT_API_KEY=... STEAM_ID=...
+```
+
+Notes: `next.config.mjs` uses `output: 'standalone'`; the image copies
+`db/migrations` (run at boot) and mounts `/app/data` for the SQLite file.
+Vercel/Netlify serverless is NOT supported as-is — the SQLite file needs a
+persistent disk (migrating to Turso/Postgres is on the production path).
+
 ## Stack
 
 Next.js 15 (App Router) + TypeScript strict · SQLite via better-sqlite3 (raw
