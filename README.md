@@ -33,6 +33,16 @@ The app is a single container with SQLite on a volume — any Docker host works.
 docker compose up -d --build   # http://localhost:3000, data persists in the cs2data volume
 ```
 
+**Railway** (hosted, deploys straight from GitHub — `railway.json` +
+`Dockerfile` are picked up automatically):
+
+1. railway.app → New Project → Deploy from GitHub repo → pick this repo and
+   branch `claude/cs2-portfolio-tracker-mvp-c2okst`.
+2. On the service: right-click (or Settings) → **Attach Volume**, mount path
+   `/app/data` — this persists the SQLite db across deploys.
+3. Settings → Networking → **Generate Domain**. Done — the app serves on the
+   injected `$PORT` automatically.
+
 **Fly.io** (hosted, HTTPS URL, free-tier friendly — machine sleeps when idle):
 
 ```bash

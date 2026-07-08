@@ -20,8 +20,11 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 COPY --from=build /app/db ./db
-RUN mkdir -p /app/data && chown -R node:node /app
-USER node
+# Runs as root: platform-mounted volumes (Railway "Attach Volume", etc.) are
+# root-owned, and a non-root USER here can't write the SQLite file into them.
+# Acceptable for a single-user app; revisit with an entrypoint chown+drop if
+# hardening is needed.
+RUN mkdir -p /app/data
 EXPOSE 3000
 VOLUME ["/app/data"]
 CMD ["node", "server.js"]
