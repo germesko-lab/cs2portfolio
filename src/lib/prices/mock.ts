@@ -49,8 +49,6 @@ interface WaveParam {
 }
 
 interface NameParams {
-  /** Fractional price change per day (mild trend, up to ~±0.1%/day). */
-  slopePerDay: number;
   waves: WaveParam[];
   /** Deterministic 3–60 listings. */
   listingsCount: number;
@@ -63,9 +61,12 @@ function paramsFor(marketHashName: string): NameParams {
   if (cached) return cached;
   const rand = mulberry32(fnv1a(marketHashName));
   const params: NameParams = {
-    // Up to ±12% over 120 days.
-    slopePerDay: ((rand() - 0.5) * 0.24) / HISTORY_DAYS,
     waves: [
+      // Long-period "trend" wave: locally (over 30/90/120 days) it reads as
+      // a mild up- or down-trend whose direction varies per item, yet it is
+      // bounded, so prices stay inside the ±20% band without hard clamping.
+      { amplitude: 0.06 + rand() * 0.06, periodDays: 240 + rand() * 240, phase: rand() * Math.PI * 2 },
+      // Shorter chop.
       { amplitude: 0.02 + rand() * 0.02, periodDays: 6 + rand() * 8, phase: rand() * Math.PI * 2 },
       { amplitude: 0.02 + rand() * 0.03, periodDays: 16 + rand() * 16, phase: rand() * Math.PI * 2 },
       { amplitude: 0.03 + rand() * 0.03, periodDays: 40 + rand() * 32, phase: rand() * Math.PI * 2 },
@@ -88,11 +89,11 @@ function isoDay(dayIndex: number): string {
 /** Pure deterministic price for one name on one absolute UTC day. */
 function priceOn(marketHashName: string, anchorPriceCents: number, dayIndex: number): number {
   const p = paramsFor(marketHashName);
-  let factor = 1 + p.slopePerDay * (dayIndex - REF_DAY_INDEX);
+  let factor = 1;
   for (const w of p.waves) {
     factor += w.amplitude * Math.sin((2 * Math.PI * dayIndex) / w.periodDays + w.phase);
   }
-  // Keep within the ±20% band around the anchor.
+  // Safety clamp to the ±20% band (only hit when all waves peak together).
   factor = Math.min(1.2, Math.max(0.8, factor));
   return Math.max(1, Math.round(anchorPriceCents * factor));
 }
