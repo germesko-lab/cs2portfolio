@@ -26,5 +26,6 @@ COPY --from=build /app/db ./db
 # hardening is needed.
 RUN mkdir -p /app/data
 EXPOSE 3000
-VOLUME ["/app/data"]
+# No VOLUME instruction: Railway rejects it (attach a volume at /app/data in
+# the dashboard); docker-compose declares its own volume mapping anyway.
 CMD ["node", "server.js"]
