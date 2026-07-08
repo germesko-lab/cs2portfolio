@@ -8,6 +8,7 @@ import type {
   SyncResponse,
 } from '@/lib/contracts/api';
 import { api } from '@/components/api';
+import type { SessionResponse } from '@/app/api/auth/session/route';
 import StatRow from '@/components/StatRow';
 import ValueChart from '@/components/ValueChart';
 import AllocationDonut from '@/components/AllocationDonut';
@@ -23,6 +24,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [syncInput, setSyncInput] = useState('');
+  const [authSteamId, setAuthSteamId] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     const [p, h] = await Promise.all([
@@ -34,10 +36,24 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    // Surface OpenID redirect outcomes (?login=ok&synced=N / syncError / authError).
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get('authError');
+    const syncError = params.get('syncError');
+    const synced = params.get('synced');
+    if (authError) setError(authError);
+    else if (syncError) setError(syncError);
+    else if (params.get('login') === 'ok') {
+      setNotice(synced ? `Signed in through Steam — synced ${synced} items.` : 'Signed in through Steam.');
+    }
+    if ([...params.keys()].length > 0) window.history.replaceState(null, '', '/');
+
     (async () => {
       try {
+        const session = await api<SessionResponse>('/api/auth/session');
+        setAuthSteamId(session.steamId);
         let p = await api<PortfolioResponse>('/api/portfolio');
-        if (p.valuation.totalPositions === 0) {
+        if (p.valuation.totalPositions === 0 && session.steamId === null) {
           await api<SyncResponse>('/api/inventory/sync', { method: 'POST', body: '{}' });
           p = await api<PortfolioResponse>('/api/portfolio');
         }
@@ -50,6 +66,16 @@ export default function Dashboard() {
       }
     })();
   }, []);
+
+  async function doLogout() {
+    try {
+      await api<{ signedOut: true }>('/api/auth/logout', { method: 'POST' });
+      setAuthSteamId(null);
+      setNotice('Signed out. The dashboard still shows the last synced inventory.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sign-out failed.');
+    }
+  }
 
   async function doSync(inputOverride?: string) {
     const input = (inputOverride ?? syncInput).trim();
@@ -110,6 +136,27 @@ export default function Dashboard() {
           )}
         </div>
         <div className="topbar-actions">
+          {authSteamId === null ? (
+            <a className="btn btn-steam" href="/api/auth/steam/login">
+              Sign in through Steam
+            </a>
+          ) : (
+            <>
+              <span className="auth-chip" title={`Signed in as SteamID64 ${authSteamId}`}>
+                Steam: {authSteamId}
+              </span>
+              <button
+                className="btn btn-primary"
+                disabled={busy !== null}
+                onClick={() => void doSync(authSteamId)}
+              >
+                {busy === 'sync' ? 'Syncing…' : 'Sync my inventory'}
+              </button>
+              <button className="btn" disabled={busy !== null} onClick={() => void doLogout()}>
+                Sign out
+              </button>
+            </>
+          )}
           <input
             className="sync-input"
             type="text"
@@ -122,11 +169,11 @@ export default function Dashboard() {
             }}
           />
           <button
-            className="btn btn-primary"
+            className={`btn ${authSteamId === null ? 'btn-primary' : ''}`}
             disabled={busy !== null || syncInput.trim() === ''}
             onClick={() => void doSync()}
           >
-            {busy === 'sync' ? 'Syncing…' : 'Sync my inventory'}
+            {busy === 'sync' ? 'Syncing…' : 'Sync from link'}
           </button>
           <button className="btn" disabled={busy !== null} onClick={() => void doSync('')}>
             Load demo

@@ -20,10 +20,18 @@ npm run dev          # http://localhost:3000
 First load auto-syncs the bundled 30-item inventory fixture, auto-estimates
 cost bases, backfills 30 days of portfolio history, and renders the dashboard.
 
-## Sync your own inventory
+## Connect your Steam account
 
-Paste any of these into the dashboard field and hit **Sync my inventory**
-(the Steam inventory must be set to Public in Steam privacy settings):
+Two ways, mirroring how CSFloat-class sites do it (research + official-docs
+summary in [`STEAM_INTEGRATION.md`](STEAM_INTEGRATION.md)):
+
+1. **Sign in through Steam** — one click; a proper OpenID 2.0 flow verified
+   server-side (`src/lib/server/steam-auth.ts`) that yields your SteamID64,
+   sets a signed session cookie and auto-syncs your inventory. Steam OpenID
+   authenticates identity only — your inventory must still be Public
+   (Steam → Edit Profile → Privacy Settings → **Inventory** → Public).
+2. **Manual entry** — paste any of these into the dashboard field and hit
+   **Sync from link** (same Public-inventory requirement):
 
 - profile URL — `steamcommunity.com/profiles/{steamid64}`
 - custom profile URL — `steamcommunity.com/id/{name}` (requires
@@ -110,6 +118,8 @@ see `.env.example`):
 | `CSGOSKINS_API_KEY` | `src/lib/prices/csgoskins.ts` | Cross-market aggregated prices (partner API) |
 | `STEAM_API_KEY` | `src/lib/steam/resolve.ts` | Resolving vanity `/id/{name}` URLs (steamcommunity.com/dev/apikey); other input forms never need it. `STEAM_WEB_API_KEY` is a legacy alias |
 | `STEAM_ID` | `src/app/api/inventory/sync/route.ts` | Optional default account synced when no input is given |
+| `APP_BASE_URL` | `src/lib/server/steam-auth.ts` | Public site URL for the OpenID realm/return URL. Optional: falls back to Railway's auto-injected `RAILWAY_PUBLIC_DOMAIN`, then the request origin |
+| `SESSION_SECRET` | `src/lib/server/steam-auth.ts` | Signs session cookies (`openssl rand -hex 32`). Optional: ephemeral secret generated when unset — sign-ins then reset on redeploy |
 
 Set `PRICE_SOURCE_MODE=live` to activate any source whose key is present;
 sources without keys are skipped gracefully and the app keeps working.

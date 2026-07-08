@@ -82,7 +82,7 @@ async function fetchPage(url: string): Promise<RawInventoryResponse> {
   if (res.status === 403) {
     throw new SteamInventoryError(
       'PRIVATE_INVENTORY',
-      'Steam returned HTTP 403 — the profile or its inventory is private. Set inventory privacy to Public and retry.',
+      'This inventory is private. In Steam: open your profile → Edit Profile → Privacy Settings → set "Inventory" to Public, then sync again. (You can switch it back afterwards.)',
       403,
     );
   }
@@ -108,7 +108,7 @@ async function fetchPage(url: string): Promise<RawInventoryResponse> {
   if (body === null) {
     throw new SteamInventoryError(
       'PRIVATE_INVENTORY',
-      'Steam returned an empty (null) inventory body — the inventory is most likely private.',
+      'Steam returned an empty response — the inventory is most likely private. In Steam: profile → Edit Profile → Privacy Settings → set "Inventory" to Public, then sync again.',
       res.status,
     );
   }
