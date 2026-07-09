@@ -1,0 +1,133 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import type { PortfolioResponse } from '@/lib/contracts/api';
+import { fmtTimestamp } from './format';
+
+function csvEscape(value: string | number | null | undefined) {
+  const s = value == null ? '' : String(value);
+  return `"${s.replaceAll('"', '""')}"`;
+}
+
+function downloadCsv(filename: string, rows: Array<Array<string | number | null | undefined>>) {
+  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export default function ExportPopover({ portfolio }: { portfolio: PortfolioResponse | null }) {
+  const [open, setOpen] = useState(false);
+  const [includeTransactions, setIncludeTransactions] = useState(true);
+  const [includeOverview, setIncludeOverview] = useState(true);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  function exportCsv() {
+    if (!portfolio) return;
+    const rows: Array<Array<string | number | null | undefined>> = [];
+    if (includeOverview) {
+      rows.push(['Portfolio overview']);
+      rows.push(['Steam ID', portfolio.steamId]);
+      rows.push(['Total value cents', portfolio.valuation.totalValueCents]);
+      rows.push(['Cost basis cents', portfolio.valuation.investedCents]);
+      rows.push(['Unrealized P/L cents', portfolio.valuation.unrealizedPlCents]);
+      rows.push([]);
+      rows.push([
+        'Asset ID',
+        'Market hash name',
+        'Category',
+        'Exterior',
+        'Float',
+        'Paint seed',
+        'Current value cents',
+        'Cost basis cents',
+        'P/L cents',
+        'Price status',
+        'Best source',
+      ]);
+      portfolio.valuation.positions.forEach((p) => {
+        rows.push([
+          p.assetId,
+          p.marketHashName,
+          p.item.category,
+          p.item.wearName,
+          p.item.floatValue,
+          p.item.paintSeed,
+          p.currentValueCents,
+          p.costBasisCents,
+          p.unrealizedPlCents,
+          p.priceStatus,
+          p.bestPrice?.best.sourceDisplayName,
+        ]);
+      });
+    }
+    if (includeTransactions) {
+      rows.push([]);
+      rows.push(['Transaction history']);
+      rows.push(['Transaction export awaits a backend transaction history endpoint.']);
+    }
+    downloadCsv(`cs2-portfolio-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    setOpen(false);
+  }
+
+  return (
+    <div className="export-wrap" ref={ref}>
+      <button className="secondary" type="button" onClick={() => setOpen((o) => !o)}>
+        Export
+      </button>
+      {open && (
+        <div className="export-popover" role="dialog" aria-label="Export portfolio">
+          <h3>Export data</h3>
+          <label className="export-option">
+            <input
+              type="checkbox"
+              checked={includeTransactions}
+              onChange={(e) => setIncludeTransactions(e.target.checked)}
+            />
+            <span>
+              <strong>Transaction History</strong>
+              <em>Placeholder section until transaction history is exposed.</em>
+            </span>
+          </label>
+          <label className="export-option">
+            <input type="checkbox" checked={includeOverview} onChange={(e) => setIncludeOverview(e.target.checked)} />
+            <span>
+              <strong>Portfolio Overview</strong>
+              <em>
+                {portfolio?.valuation.asOf ? `Snapshot from ${fmtTimestamp(portfolio.valuation.asOf)}` : 'Current portfolio snapshot'}
+              </em>
+            </span>
+          </label>
+          <button
+            className="primary export-submit"
+            type="button"
+            disabled={!portfolio || (!includeTransactions && !includeOverview)}
+            onClick={exportCsv}
+          >
+            Export to CSV
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

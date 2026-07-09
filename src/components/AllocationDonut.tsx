@@ -1,72 +1,111 @@
 'use client';
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { useMemo, useState } from 'react';
 import type { CategoryAllocation } from '@/lib/contracts/valuation';
-import { CATEGORY_COLORS, CATEGORY_LABELS, CHART, fmtUsd, fmtUsdCompact } from './format';
+import type { ItemCategory } from '@/lib/contracts/types';
+import { CATEGORY_COLORS, CATEGORY_LABELS, fmtPct, fmtUsd, fmtUsdCompact } from './format';
 
-/**
- * Category allocation donut + labeled legend list (the legend carries the
- * identity — the palette validator flagged CVD floor band, so every slice is
- * always named with its value alongside).
- */
+const size = 232;
+const radius = 86;
+const strokeWidth = 34;
+const circumference = 2 * Math.PI * radius;
+
 export default function AllocationDonut({ allocation }: { allocation: CategoryAllocation[] }) {
-  const data = allocation.map((a) => ({
-    key: a.category,
-    name: CATEGORY_LABELS[a.category],
-    value: a.valueCents / 100,
-    weightPct: a.weightPct,
-    positionCount: a.positionCount,
-    color: CATEGORY_COLORS[a.category],
-  }));
+  const [hovered, setHovered] = useState<ItemCategory | null>(null);
+  const data = useMemo(
+    () =>
+      allocation
+        .filter((a) => a.valueCents > 0)
+        .map((a) => ({
+          ...a,
+          label: CATEGORY_LABELS[a.category],
+          color: CATEGORY_COLORS[a.category],
+        })),
+    [allocation],
+  );
+
+  const total = data.reduce((sum, item) => sum + item.valueCents, 0);
+  let offset = 0;
+  const active = hovered ? data.find((item) => item.category === hovered) : null;
 
   return (
-    <div className="panel chart-panel">
-      <h2 className="panel-title">Allocation by category</h2>
+    <section className="card allocation-card">
+      <div className="card-head">
+        <div>
+          <h2 className="card-title">Allocation</h2>
+          <p className="card-subtitle">By item type from priced real holdings.</p>
+        </div>
+      </div>
       {data.length === 0 ? (
-        <div className="empty-note">Nothing priced yet.</div>
+        <div className="chart-empty">Nothing priced yet. Missing-price items stay out of allocation.</div>
       ) : (
-        <div className="donut-wrap">
-          <ResponsiveContainer width="45%" height={220}>
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="value"
-                nameKey="name"
-                innerRadius="62%"
-                outerRadius="95%"
-                paddingAngle={2}
-                stroke={CHART.surface}
-                strokeWidth={2}
-              >
-                {data.map((d) => (
-                  <Cell key={d.key} fill={d.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  background: CHART.surface,
-                  border: `1px solid ${CHART.axisLine}`,
-                  borderRadius: 6,
-                  fontSize: 12,
-                }}
-                formatter={(value, name) => [fmtUsd(Math.round(Number(value) * 100)), name]}
+        <div className="allocation-wrap" onMouseLeave={() => setHovered(null)}>
+          <div className="donut-shell">
+            <svg className="donut-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img">
+              <title>Portfolio allocation by category</title>
+              <circle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                fill="none"
+                stroke="var(--line)"
+                strokeWidth={strokeWidth}
               />
-            </PieChart>
-          </ResponsiveContainer>
-          <ul className="donut-legend">
-            {data.map((d) => (
-              <li key={d.key}>
-                <span className="chip" style={{ background: d.color }} />
-                <span className="donut-cat">{d.name}</span>
-                <span className="donut-val">{fmtUsdCompact(Math.round(d.value * 100))}</span>
-                <span className="donut-meta">
-                  {d.weightPct.toFixed(1)}% · {d.positionCount}
-                </span>
-              </li>
-            ))}
-          </ul>
+              {data.map((item) => {
+                const length = (item.valueCents / total) * circumference;
+                const dash = `${Math.max(length - 3, 0)} ${circumference}`;
+                const segmentOffset = offset;
+                offset += length;
+                const dim = hovered !== null && hovered !== item.category;
+                return (
+                  <circle
+                    key={item.category}
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={radius}
+                    fill="none"
+                    stroke={item.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={dash}
+                    strokeDashoffset={-segmentOffset}
+                    strokeLinecap="round"
+                    className={dim ? 'donut-segment dimmed' : 'donut-segment'}
+                    transform={`rotate(-90 ${size / 2} ${size / 2})`}
+                    onMouseEnter={() => setHovered(item.category)}
+                    onFocus={() => setHovered(item.category)}
+                    onBlur={() => setHovered(null)}
+                    tabIndex={0}
+                  />
+                );
+              })}
+            </svg>
+            <div className="donut-center">
+              <strong>{active ? fmtUsdCompact(active.valueCents) : fmtUsdCompact(total)}</strong>
+              <span>{active ? active.label : 'Total value'}</span>
+            </div>
+          </div>
+          <div className="allocation-list">
+            {data.map((item) => {
+              const dim = hovered !== null && hovered !== item.category;
+              return (
+                <button
+                  key={item.category}
+                  type="button"
+                  className={dim ? 'alloc-row dimmed' : 'alloc-row'}
+                  onMouseEnter={() => setHovered(item.category)}
+                  onFocus={() => setHovered(item.category)}
+                  onBlur={() => setHovered(null)}
+                >
+                  <span className="alloc-dot" style={{ background: item.color }} />
+                  <span className="alloc-name">{item.label}</span>
+                  <strong>{fmtUsd(item.valueCents)}</strong>
+                  <span>{fmtPct(item.weightPct)}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

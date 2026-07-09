@@ -13,7 +13,7 @@ function MoverRows({ items }: { items: PositionValuation[] }) {
             {p.marketHashName}
           </span>
           <span className={`mover-pl ${plClass(p.unrealizedPlCents)}`}>
-            {p.unrealizedPlCents != null ? fmtSignedUsd(p.unrealizedPlCents) : '—'}
+            {p.unrealizedPlCents != null ? fmtSignedUsd(p.unrealizedPlCents) : '-'}
           </span>
           <span className={`mover-pct ${plClass(p.unrealizedPlCents)}`}>
             {p.unrealizedPlPct != null ? fmtSignedPct(p.unrealizedPlPct) : ''}
