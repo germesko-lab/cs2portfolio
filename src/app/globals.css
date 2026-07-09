@@ -529,6 +529,16 @@ body[data-theme='dark'] .banner-info {
   font-weight: 900;
 }
 
+.header-metric.pl-gain .metric-value,
+.header-metric.pl-gain .metric-sub {
+  color: var(--green);
+}
+
+.header-metric.pl-loss .metric-value,
+.header-metric.pl-loss .metric-sub {
+  color: var(--red);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -896,6 +906,11 @@ body[data-theme='dark'] .range {
 
 .source-pill.off {
   border-color: rgba(234, 57, 67, 0.3);
+}
+
+.source-pill.compact {
+  padding: 3px 8px;
+  font-size: 11px;
 }
 
 .export-wrap {
