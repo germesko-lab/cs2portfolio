@@ -4,18 +4,20 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import type { CategoryAllocation } from '@/lib/contracts/valuation';
 import type { SnapshotPoint } from '@/lib/contracts/types';
+import AllocationDonut from './AllocationDonut';
 import { fmtDayLong, fmtDayShort, fmtUsd, fmtUsdCompact } from './format';
 
 type ChartKind = 'holdings' | 'performance';
 
 export type RangeKey = '24h' | '7d' | '30d' | '90d' | 'all';
+export type HoldingsMode = 'history' | 'allocation';
 
 const ranges: RangeKey[] = ['24h', '7d', '30d', '90d', 'all'];
 
@@ -28,11 +30,17 @@ export default function ValueChart({
   kind,
   range,
   onRangeChange,
+  allocation,
+  holdingsMode = 'history',
+  onHoldingsModeChange,
 }: {
   points: SnapshotPoint[];
   kind: ChartKind;
   range?: RangeKey;
   onRangeChange?: (range: RangeKey) => void;
+  allocation?: CategoryAllocation[];
+  holdingsMode?: HoldingsMode;
+  onHoldingsModeChange?: (mode: HoldingsMode) => void;
 }) {
   const data = points.map((p) => {
     const value = p.totalValueCents / 100;
@@ -61,22 +69,56 @@ export default function ValueChart({
           <h2 className="card-title">{title}</h2>
           <p className="card-subtitle">{subtitle}</p>
         </div>
-        {onRangeChange && range && (
-          <div className="range" aria-label="Chart range">
-            {ranges.map((r) => (
+        {!isPerformance && (
+          <div className="chart-controls">
+            {onRangeChange && range && (
+              <div className="range" aria-label="Chart range">
+                {ranges.map((r) => (
+                  <button
+                    key={r}
+                    className={range === r ? 'active' : ''}
+                    type="button"
+                    onClick={() => onRangeChange(r)}
+                  >
+                    {r === 'all' ? 'All' : r}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="segmented" aria-label="Holdings view">
               <button
-                key={r}
-                className={range === r ? 'active' : ''}
+                className={holdingsMode === 'history' ? 'active' : ''}
                 type="button"
-                onClick={() => onRangeChange(r)}
+                onClick={() => onHoldingsModeChange?.('history')}
               >
-                {r === 'all' ? 'All' : r}
+                History
               </button>
-            ))}
+              <button
+                className={holdingsMode === 'allocation' ? 'active' : ''}
+                type="button"
+                onClick={() => onHoldingsModeChange?.('allocation')}
+              >
+                Allocation
+              </button>
+            </div>
           </div>
         )}
       </div>
-      {data.length === 0 ? (
+      {isPerformance && (
+        <div className="legend">
+          <span className="legend-item">
+            <span className="legend-dot blue" />
+            Portfolio profit
+          </span>
+          <span className="legend-item unavailable" title="Market index history is not exposed by the backend yet.">
+            <span className="legend-dot gold" />
+            CS2 market trend N/A
+          </span>
+        </div>
+      )}
+      {!isPerformance && holdingsMode === 'allocation' ? (
+        <AllocationDonut allocation={allocation ?? []} embedded />
+      ) : data.length === 0 ? (
         <EmptyChart text={emptyText} />
       ) : (
         <div className="chart-stage">
@@ -84,8 +126,8 @@ export default function ValueChart({
             <AreaChart data={data} margin={{ top: 10, right: 6, bottom: 0, left: 0 }}>
               <defs>
                 <linearGradient id={`${kind}Fill`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={isPerformance ? '#ff4d4f' : '#3861fb'} stopOpacity={0.24} />
-                  <stop offset="100%" stopColor={isPerformance ? '#ff4d4f' : '#3861fb'} stopOpacity={0.03} />
+                  <stop offset="0%" stopColor="#3861fb" stopOpacity={0.24} />
+                  <stop offset="100%" stopColor="#3861fb" stopOpacity={0.03} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
@@ -123,27 +165,16 @@ export default function ValueChart({
                 ]}
               />
               {isPerformance ? (
-                <>
-                  <Area
-                    type="monotone"
-                    dataKey="profit"
-                    name="Portfolio profit"
-                    stroke="#ff4d4f"
-                    strokeWidth={2.6}
-                    fill={`url(#${kind}Fill)`}
-                    dot={false}
-                    activeDot={{ r: 4 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="invested"
-                    name="Cost basis"
-                    stroke="#f7b678"
-                    strokeWidth={2.2}
-                    dot={false}
-                    strokeDasharray="5 5"
-                  />
-                </>
+                <Area
+                  type="monotone"
+                  dataKey="profit"
+                  name="Portfolio profit"
+                  stroke="#3861fb"
+                  strokeWidth={2.6}
+                  fill={`url(#${kind}Fill)`}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
               ) : (
                 <Area
                   type="monotone"

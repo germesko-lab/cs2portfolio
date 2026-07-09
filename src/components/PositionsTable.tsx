@@ -32,6 +32,7 @@ export function FloatBadge({ p }: { p: PositionValuation }) {
 
 function NameCell({ p }: { p: PositionValuation }) {
   const it = p.item;
+  const floatText = it.floatValue != null ? ` - ${it.floatValue.toFixed(4)}` : '';
   return (
     <div className="asset">
       <div className="skin-thumb">
@@ -53,7 +54,12 @@ function NameCell({ p }: { p: PositionValuation }) {
           <span className="rarity-dot" style={{ background: CATEGORY_COLORS[it.category] }} />
           {CATEGORY_LABELS[it.category]}
           {it.wearName ? ` - ${it.wearName}` : ''}
+          {floatText}
           {it.stickers.length > 0 ? ` - ${it.stickers.length} sticker${it.stickers.length > 1 ? 's' : ''}` : ''}
+        </div>
+        <div className="asset-float-line">
+          <FloatBadge p={p} />
+          {it.paintSeed != null && <span className="seed-chip">Seed {it.paintSeed}</span>}
         </div>
       </div>
     </div>
@@ -188,6 +194,27 @@ function CostBasisCell({
   );
 }
 
+function LiquidityCell({ p }: { p: PositionValuation }) {
+  const listings = p.bestPrice?.best.listingsCount;
+  if (listings == null) return <span className="dim">Unknown</span>;
+  if (listings >= 30) return <span className="liquidity high">High</span>;
+  if (listings >= 8) return <span className="liquidity medium">Medium</span>;
+  return <span className="liquidity low">Low</span>;
+}
+
+function ActionsCell({ p }: { p: PositionValuation }) {
+  return (
+    <div className="action-icons">
+      <button type="button" title="Watchlist state is not exposed by the backend yet.">
+        *
+      </button>
+      <button type="button" title={p.bestPrice ? `Fetched ${fmtTimestamp(p.bestPrice.best.fetchedAt)}` : 'No price source yet'}>
+        ...
+      </button>
+    </div>
+  );
+}
+
 export default function PositionsTable({
   positions,
   onChanged,
@@ -202,28 +229,36 @@ export default function PositionsTable({
       <div className="section-top">
         <div className="tabs">
           <button className="tab active" type="button">
-            Holdings
+            Assets
           </button>
           <button className="tab" type="button" disabled title="Transaction history is not exposed by the backend yet.">
             Transactions
           </button>
         </div>
-        <div className="table-note">{positions.length} real inventory positions</div>
+        <div className="filters">
+          <button className="filter" type="button" title="Frontend filter UI only; filtering is not wired yet.">
+            All Types
+            <span>v</span>
+          </button>
+          <button className="filter" type="button" title="Frontend filter UI only; filtering is not wired yet.">
+            All Sources
+            <span>v</span>
+          </button>
+        </div>
       </div>
       <div className="table-card">
-        <table className="holdings-table">
+        <table className="holdings-table" aria-label="CS2 skin portfolio assets">
           <thead>
             <tr>
-              <th>Item</th>
-              <th>Exterior</th>
-              <th>Float / seed</th>
-              <th>Current price</th>
-              <th>Cost basis</th>
-              <th>Qty</th>
-              <th>Value</th>
-              <th>PnL</th>
+              <th>Asset <span className="sortable">sort</span></th>
+              <th>Est. Price <span className="sortable">sort</span></th>
+              <th>24h <span className="sortable">sort</span></th>
+              <th>7d <span className="sortable">sort</span></th>
+              <th>Buy Price <span className="sortable">sort</span></th>
+              <th>Profit/Loss <span className="sortable">sort</span></th>
               <th>Source</th>
-              <th>Price status</th>
+              <th>Liquidity</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -232,18 +267,18 @@ export default function PositionsTable({
                 <td>
                   <NameCell p={p} />
                 </td>
-                <td>{p.item.wearName ?? <span className="dim">N/A</span>}</td>
-                <td>
-                  <FloatBadge p={p} />
-                </td>
                 <td>
                   <BestPriceCell p={p} />
+                </td>
+                <td className="num">
+                  <span className="dim">N/A</span>
+                </td>
+                <td className="num">
+                  <span className="dim">N/A</span>
                 </td>
                 <td>
                   <CostBasisCell p={p} onSaved={onChanged} onError={onError} />
                 </td>
-                <td className="num">1</td>
-                <td className="num">{p.currentValueCents != null ? fmtUsd(p.currentValueCents) : <span className="dim">-</span>}</td>
                 <td className={`num ${plClass(p.unrealizedPlCents)}`}>
                   {p.unrealizedPlCents != null ? (
                     <>
@@ -258,12 +293,10 @@ export default function PositionsTable({
                   <span className="source-pill compact">{p.bestPrice?.best.sourceDisplayName ?? 'Pending'}</span>
                 </td>
                 <td>
-                  <span
-                    className={`status status-${p.priceStatus}`}
-                    title={p.bestPrice ? `Fetched ${fmtTimestamp(p.bestPrice.best.fetchedAt)}` : 'No source can price this item'}
-                  >
-                    {p.priceStatus}
-                  </span>
+                  <LiquidityCell p={p} />
+                </td>
+                <td>
+                  <ActionsCell p={p} />
                 </td>
               </tr>
             ))}

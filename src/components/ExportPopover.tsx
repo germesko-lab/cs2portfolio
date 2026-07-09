@@ -25,8 +25,8 @@ function downloadCsv(filename: string, rows: Array<Array<string | number | null 
 
 export default function ExportPopover({ portfolio }: { portfolio: PortfolioResponse | null }) {
   const [open, setOpen] = useState(false);
-  const [includeTransactions, setIncludeTransactions] = useState(true);
-  const [includeOverview, setIncludeOverview] = useState(true);
+  const [includeTransactions, setIncludeTransactions] = useState(false);
+  const [includeOverview, setIncludeOverview] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -100,35 +100,44 @@ export default function ExportPopover({ portfolio }: { portfolio: PortfolioRespo
       </button>
       {open && (
         <div className="export-popover" role="dialog" aria-label="Export portfolio">
-          <h3>Export data</h3>
           <label className="export-option">
             <input
+              className="export-choice"
               type="checkbox"
               checked={includeTransactions}
               onChange={(e) => setIncludeTransactions(e.target.checked)}
             />
-            <span>
+            <span className="export-option-text">
               <strong>Transaction History</strong>
-              <em>Placeholder section until transaction history is exposed.</em>
+              <small>Awaiting backend transaction history</small>
             </span>
+            <span className="export-check" aria-hidden="true" />
           </label>
           <label className="export-option">
-            <input type="checkbox" checked={includeOverview} onChange={(e) => setIncludeOverview(e.target.checked)} />
-            <span>
+            <input
+              className="export-choice"
+              type="checkbox"
+              checked={includeOverview}
+              onChange={(e) => setIncludeOverview(e.target.checked)}
+            />
+            <span className="export-option-text">
               <strong>Portfolio Overview</strong>
-              <em>
+              <small>
                 {portfolio?.valuation.asOf ? `Snapshot from ${fmtTimestamp(portfolio.valuation.asOf)}` : 'Current portfolio snapshot'}
-              </em>
+              </small>
             </span>
+            <span className="export-check" aria-hidden="true" />
           </label>
-          <button
-            className="primary export-submit"
-            type="button"
-            disabled={!portfolio || (!includeTransactions && !includeOverview)}
-            onClick={exportCsv}
-          >
-            Export to CSV
-          </button>
+          <div className="export-footer">
+            <button
+              className="primary export-submit"
+              type="button"
+              disabled={!portfolio || (!includeTransactions && !includeOverview)}
+              onClick={exportCsv}
+            >
+              Export to CSV
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -22,7 +22,7 @@ export default function PerformerCard({
   if (!position) {
     return (
       <article className="skin-feature-card empty-performer">
-        <div className="performer-title">{title}</div>
+        {title && <div className="performer-title">{title}</div>}
         <p>{emptyText}</p>
       </article>
     );
@@ -34,7 +34,7 @@ export default function PerformerCard({
 
   return (
     <article className="skin-feature-card" style={{ '--quality-accent': accent } as CSSProperties}>
-      <div className="performer-title">{title}</div>
+      {title && <div className="performer-title">{title}</div>}
       <div className="feature-hero">
         <div className="feature-head">
           <div>

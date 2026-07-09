@@ -10,11 +10,10 @@ import type {
 import type { PositionValuation } from '@/lib/contracts/valuation';
 import type { SessionResponse } from '@/app/api/auth/session/route';
 import { api } from '@/components/api';
-import AllocationDonut from '@/components/AllocationDonut';
 import ExportPopover from '@/components/ExportPopover';
 import PerformerCard from '@/components/PerformerCard';
 import PositionsTable from '@/components/PositionsTable';
-import ValueChart, { type RangeKey } from '@/components/ValueChart';
+import ValueChart, { type HoldingsMode, type RangeKey } from '@/components/ValueChart';
 import { fmtSignedPct, fmtSignedUsd, fmtTimestamp, fmtUsd, plClass } from '@/components/format';
 
 type BusyState = 'sync' | 'refresh' | null;
@@ -55,8 +54,10 @@ export default function Dashboard() {
   const [authSteamId, setAuthSteamId] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>('30d');
+  const [holdingsMode, setHoldingsMode] = useState<HoldingsMode>('history');
   const [theme, setTheme] = useState<Theme>('light');
   const [currency, setCurrency] = useState<Currency>('USD');
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const loadAll = useCallback(async (selectedRange: RangeKey) => {
     const p = await api<PortfolioResponse>('/api/portfolio');
@@ -174,6 +175,8 @@ export default function Dashboard() {
   const valuation = portfolio?.valuation ?? null;
   const best = choosePerformer(valuation?.topGainers ?? []);
   const worst = choosePerformer(valuation?.topLosers ?? []);
+  const bestPerformers = valuation?.topGainers.filter((p) => p.unrealizedPlCents != null).slice(0, 4) ?? [];
+  const worstPerformers = valuation?.topLosers.filter((p) => p.unrealizedPlCents != null).slice(0, 2) ?? [];
   const missingCount = valuation ? valuation.totalPositions - valuation.pricedPositions : 0;
 
   function changeRange(next: RangeKey) {
@@ -226,7 +229,7 @@ export default function Dashboard() {
       <div className="app">
         <aside className="sidebar">
           <div className="side-head">
-            <span>Portfolio</span>
+            <span>My portfolio</span>
             <button className="edit" type="button" title="Portfolio editing is not implemented yet.">
               ...
             </button>
@@ -234,44 +237,13 @@ export default function Dashboard() {
           <div className="portfolio-card">
             <span className="dot" />
             <div>
-              <div className="portfolio-title">Main inventory</div>
+              <div className="portfolio-title">CS2 Main Portfolio</div>
               <div className="portfolio-value">{valuation ? fmtUsd(valuation.totalValueCents) : 'No value yet'}</div>
             </div>
           </div>
-
-          {authSteamId !== null && (
-            <div className="side-section">
-              <div className="side-label">Inventory actions</div>
-              <button className="primary side-button" disabled={busy !== null} type="button" onClick={() => void doSync('')}>
-                {busy === 'sync' ? 'Syncing...' : 'Sync my inventory'}
-              </button>
-              <input
-                className="sync-input"
-                type="text"
-                placeholder="Steam URL, SteamID64, or trade link"
-                value={syncInput}
-                disabled={busy !== null}
-                onChange={(e) => setSyncInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && syncInput.trim() !== '') void doSync();
-                }}
-              />
-              <div className="side-actions">
-                <button className="secondary" disabled={busy !== null || syncInput.trim() === ''} type="button" onClick={() => void doSync()}>
-                  Sync link
-                </button>
-                <button className="secondary" disabled={busy !== null} type="button" onClick={() => void doSync('demo')}>
-                  Demo
-                </button>
-              </div>
-              <button className="secondary side-button" disabled={busy !== null} type="button" onClick={() => void doRefresh()}>
-                {busy === 'refresh' ? 'Refreshing...' : 'Refresh prices'}
-              </button>
-              <button className="secondary side-button" disabled={busy !== null} type="button" onClick={() => void doLogout()}>
-                Sign out
-              </button>
-            </div>
-          )}
+          <button className="create" type="button" title="Multiple portfolios are not implemented yet.">
+            + Create portfolio
+          </button>
 
           <div className="side-section">
             <div className="side-label">Coverage</div>
@@ -326,6 +298,9 @@ export default function Dashboard() {
             <section className="card signed-out-panel">
               <h1>No portfolio loaded yet</h1>
               <p>Sync your Steam inventory to start tracking live prices, cost basis, and portfolio history.</p>
+              <button className="primary" disabled={busy !== null} type="button" onClick={() => void doSync('')}>
+                {busy === 'sync' ? 'Syncing...' : 'Sync my inventory'}
+              </button>
             </section>
           ) : (
             <>
@@ -333,10 +308,13 @@ export default function Dashboard() {
                 <span className="placeholder-logo" />
                 <div className="portfolio-hero-copy">
                   <div className="title-row">
-                    Main inventory <span className="tag">Live</span>
+                    CS2 Main Portfolio <span className="tag">Default</span>
                   </div>
                   <div className="value-row">
                     <h1 className="portfolio-value-main">{fmtUsd(valuation.totalValueCents)}</h1>
+                    <span className="eye" title="Portfolio value is visible.">
+                      o
+                    </span>
                   </div>
                   <div className={`daily-change ${dailyChange ? plClass(dailyChange.delta) : ''}`}>
                     {dailyChange ? (
@@ -348,59 +326,103 @@ export default function Dashboard() {
                       '24h change unavailable until another snapshot exists'
                     )}
                   </div>
-                  <div className="portfolio-summary-grid">
-                    <div className="header-metric">
-                      <span className="metric-label">Cost basis</span>
-                      <strong className="metric-value">{fmtUsd(valuation.investedCents)}</strong>
-                    </div>
-                    <div className={`header-metric ${plClass(valuation.unrealizedPlCents)}`}>
-                      <span className="metric-label">All-time profit</span>
-                      <strong className="metric-value">{fmtSignedUsd(valuation.unrealizedPlCents)}</strong>
-                      <span className="metric-sub">{valuation.unrealizedPlPct != null ? fmtSignedPct(valuation.unrealizedPlPct) : 'N/A'}</span>
-                    </div>
-                    <div className="header-metric">
-                      <span className="metric-label">Positions</span>
-                      <strong className="metric-value">{valuation.totalPositions}</strong>
-                      <span className="metric-sub">{missingCount > 0 ? `${missingCount} missing prices` : 'all priced'}</span>
-                    </div>
+                </div>
+                <div className="portfolio-summary-grid">
+                  <div className={`header-metric ${plClass(valuation.unrealizedPlCents)}`}>
+                    <span className="metric-label">All-time profit</span>
+                    <strong className="metric-value">{fmtSignedUsd(valuation.unrealizedPlCents)}</strong>
+                    <span className="metric-sub">{valuation.unrealizedPlPct != null ? fmtSignedPct(valuation.unrealizedPlPct) : 'N/A'}</span>
+                  </div>
+                  <div className="header-metric">
+                    <span className="metric-label">Cost Basis</span>
+                    <strong className="metric-value">{fmtUsd(valuation.investedCents)}</strong>
                   </div>
                 </div>
                 <div className="header-actions">
-                  <button className="primary" disabled={busy !== null} type="button" onClick={() => void doSync('')}>
-                    Import
-                  </button>
                   <ExportPopover portfolio={portfolio} />
+                  <div className="more-wrap">
+                    <button className="secondary more" type="button" onClick={() => setMoreOpen((open) => !open)}>
+                      ...
+                    </button>
+                    {moreOpen && (
+                      <div className="more-popover">
+                        <button disabled={busy !== null} type="button" onClick={() => void doSync('')}>
+                          {busy === 'sync' ? 'Syncing...' : 'Sync inventory'}
+                        </button>
+                        <input
+                          className="sync-input"
+                          type="text"
+                          placeholder="Steam URL, SteamID64, or trade link"
+                          value={syncInput}
+                          disabled={busy !== null}
+                          onChange={(e) => setSyncInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && syncInput.trim() !== '') void doSync();
+                          }}
+                        />
+                        <button disabled={busy !== null || syncInput.trim() === ''} type="button" onClick={() => void doSync()}>
+                          Sync link
+                        </button>
+                        <button disabled={busy !== null} type="button" onClick={() => void doRefresh()}>
+                          {busy === 'refresh' ? 'Refreshing...' : 'Refresh prices'}
+                        </button>
+                        <button disabled={busy !== null} type="button" onClick={() => void doLogout()}>
+                          Sign out
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
 
-              <div className="performers-row">
-                <PerformerCard title="Best performer" position={best} emptyText="Add cost basis to calculate top performers." />
-                <PerformerCard title="Worst performer" position={worst} emptyText="No losing position is computable yet." />
-              </div>
-
               <div className="dashboard">
                 <div className="stack">
-                  <ValueChart points={history?.points ?? []} kind="holdings" range={range} onRangeChange={changeRange} />
-                  <ValueChart points={history?.points ?? []} kind="performance" />
+                  <ValueChart
+                    points={history?.points ?? []}
+                    kind="holdings"
+                    range={range}
+                    onRangeChange={changeRange}
+                    allocation={valuation.byCategory}
+                    holdingsMode={holdingsMode}
+                    onHoldingsModeChange={setHoldingsMode}
+                  />
                 </div>
                 <div className="right-stack">
-                  <AllocationDonut allocation={valuation.byCategory} />
-                  <section className="card source-card">
-                    <h2 className="card-title">Sources</h2>
-                    <div className="source-list">
-                      {portfolio.priceSources.map((s) => (
-                        <span key={s.id} className={`source-pill ${s.configured ? 'on' : 'off'}`}>
-                          {s.displayName}
-                          <em>{s.configured ? (s.id === 'mock' ? 'mock' : 'live') : 'no key'}</em>
-                        </span>
-                      ))}
-                    </div>
-                    <p className="card-subtitle">
-                      As of {fmtTimestamp(valuation.asOf)}
-                      {version ? ` - build ${version}` : ''}
-                    </p>
-                  </section>
+                  <ValueChart points={history?.points ?? []} kind="performance" />
                 </div>
+              </div>
+
+              <div className="performers-row">
+                <section className="card performers-section performers-best">
+                  <div className="performers-heading">Best Performer</div>
+                  <div className="performers-scroller">
+                    {bestPerformers.length > 0 ? (
+                      bestPerformers.map((position) => (
+                        <PerformerCard key={position.assetId} title="" position={position} emptyText="Add cost basis to calculate top performers." />
+                      ))
+                    ) : (
+                      <PerformerCard title="" position={best} emptyText="Add cost basis to calculate top performers." />
+                    )}
+                  </div>
+                </section>
+                <section className="card performers-section performers-worst">
+                  <div className="performers-heading">Worst Performer</div>
+                  <div className="performers-scroller">
+                    {worstPerformers.length > 0 ? (
+                      worstPerformers.map((position) => (
+                        <PerformerCard key={position.assetId} title="" position={position} emptyText="No losing position is computable yet." />
+                      ))
+                    ) : (
+                      <PerformerCard title="" position={worst} emptyText="No losing position is computable yet." />
+                    )}
+                  </div>
+                </section>
+              </div>
+
+              <div className="dashboard-meta">
+                As of {fmtTimestamp(valuation.asOf)}
+                {version ? ` - build ${version}` : ''}
+                {missingCount > 0 ? ` - ${missingCount} missing prices` : ''}
               </div>
 
               <PositionsTable positions={valuation.positions} onChanged={onTableChanged} onError={setError} />
