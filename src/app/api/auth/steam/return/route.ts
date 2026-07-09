@@ -6,13 +6,14 @@ import {
   upsertUserFromSteam,
   verifyOpenIdReturn,
 } from '@/lib/server/steam-auth';
-import { syncInventory, ApiError } from '@/lib/server/portfolio-service';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/auth/steam/return - verify Steam OpenID, upsert the user, create a
- * persistent 30-day session, then try to sync that user's public inventory.
+ * GET /api/auth/steam/return - verify Steam OpenID, upsert the user and create
+ * a persistent 30-day session. Inventory sync is intentionally kicked off by
+ * the dashboard after redirect so Steam login is not blocked by slow inventory
+ * paging, rate limits, price history, or cost-basis backfill work.
  */
 export async function GET(request: Request): Promise<NextResponse> {
   const base = resolveBaseUrl(request);
@@ -28,18 +29,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   const user = upsertUserFromSteam(steamId);
-  let target = `${base}/?login=ok`;
-  try {
-    const sync = await syncInventory(user, steamId);
-    target = `${base}/?login=ok&synced=${sync.itemCount}`;
-  } catch (err) {
-    const message =
-      err instanceof ApiError || err instanceof Error
-        ? err.message
-        : 'Could not sync the inventory after sign-in.';
-    target = `${base}/?login=ok&syncError=${encodeURIComponent(message)}`;
-  }
-
+  const target = `${base}/?login=ok&sync=pending`;
   const res = NextResponse.redirect(target, 302);
   res.headers.set('Set-Cookie', createSessionCookie(user.id, base.startsWith('https://')));
   return res;

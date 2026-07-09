@@ -77,10 +77,17 @@ export default function Dashboard() {
     const authError = params.get('authError');
     const syncError = params.get('syncError');
     const synced = params.get('synced');
+    const syncPending = params.get('sync') === 'pending';
     if (authError) setError(authError);
     else if (syncError) setError(syncError);
     else if (params.get('login') === 'ok') {
-      setNotice(synced ? `Signed in through Steam and synced ${synced} items.` : 'Signed in through Steam.');
+      setNotice(
+        syncPending
+          ? 'Signed in through Steam. Syncing your inventory now...'
+          : synced
+            ? `Signed in through Steam and synced ${synced} items.`
+            : 'Signed in through Steam.',
+      );
     }
     if ([...params.keys()].length > 0) window.history.replaceState(null, '', '/');
 
@@ -98,6 +105,9 @@ export default function Dashboard() {
           return;
         }
         await loadAll('30d');
+        if (syncPending) {
+          window.setTimeout(() => void doSync(''), 0);
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load portfolio.');
       } finally {
