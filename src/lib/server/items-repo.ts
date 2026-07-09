@@ -3,7 +3,7 @@
  * table. Cost basis rows live in stream C and are joined in memory.
  */
 import { db } from '../db';
-import { getAllCostBasis } from '../valuation';
+import { getAllCostBasisForItems } from '../valuation';
 import type {
   CanonicalItem,
   ItemCategory,
@@ -133,8 +133,9 @@ export function getItem(userId: number, assetId: string): CanonicalItem | null {
 }
 
 export function getPositions(userId: number): Position[] {
-  const basisByAsset = getAllCostBasis(userId);
-  return getItems(userId).map((item) => ({
+  const items = getItems(userId);
+  const basisByAsset = getAllCostBasisForItems(userId, items);
+  return items.map((item) => ({
     item,
     costBasis: basisByAsset.get(item.assetId) ?? null,
   }));

@@ -12,7 +12,8 @@ import {
   buildSnapshot,
   upsertCostBasis,
   deleteCostBasis,
-  getAllCostBasis,
+  getAllCostBasisForItems,
+  costBasisItemKey,
   upsertSnapshot,
   backfillSnapshots,
   clearSnapshots,
@@ -105,7 +106,7 @@ async function valueSinglePosition(
   const status: PriceStatus = bestPrice ? freshness(bestPrice) : 'missing';
   const position: Position = {
     item,
-    costBasis: getAllCostBasis(user.id).get(item.assetId) ?? null,
+    costBasis: getAllCostBasisForItems(user.id, [item]).get(item.assetId) ?? null,
   };
   return valuePosition(position, bestPrice, status);
 }
@@ -151,7 +152,7 @@ export async function syncInventory(
     historyByName.set(name, await priceService.getPriceHistory(name, HISTORY_DAYS));
   }
 
-  const existingBasis = getAllCostBasis(user.id);
+  const existingBasis = getAllCostBasisForItems(user.id, items);
   const needsBasis = items.filter((i) => !existingBasis.has(i.assetId));
   let bestForFallback = new Map<string, BestPrice>();
   if (needsBasis.length > 0) {
@@ -162,18 +163,23 @@ export async function syncInventory(
     const fallback = bestForFallback.get(item.marketHashName)?.best.priceCents ?? null;
     const amountCents = estimateAutoCostBasis(item.acquiredAt, history, fallback);
     if (amountCents !== null) {
-      upsertCostBasis(user.id, item.assetId, {
-        amountCents,
-        currency: 'USD',
-        source: 'auto',
-        acquiredAt: item.acquiredAt,
-      });
+      upsertCostBasis(
+        user.id,
+        item.assetId,
+        {
+          amountCents,
+          currency: 'USD',
+          source: 'auto',
+          acquiredAt: item.acquiredAt,
+        },
+        costBasisItemKey(item),
+      );
     }
   }
 
   if (items.length > 0) {
     let investedCents = 0;
-    for (const basis of getAllCostBasis(user.id).values()) investedCents += basis.amountCents;
+    for (const basis of getAllCostBasisForItems(user.id, items).values()) investedCents += basis.amountCents;
 
     const points: SnapshotPoint[] = [];
     const now = new Date();
@@ -243,12 +249,17 @@ export async function setManualCostBasis(
   if (!item) {
     throw new ApiError(404, 'UNKNOWN_ASSET', `No inventory item with assetId "${assetId}"`);
   }
-  upsertCostBasis(user.id, assetId, {
-    amountCents,
-    currency: 'USD',
-    source: 'manual',
-    acquiredAt: item.acquiredAt,
-  });
+  upsertCostBasis(
+    user.id,
+    assetId,
+    {
+      amountCents,
+      currency: 'USD',
+      source: 'manual',
+      acquiredAt: item.acquiredAt,
+    },
+    costBasisItemKey(item),
+  );
   return valueSinglePosition(user, item);
 }
 
@@ -266,12 +277,17 @@ export async function resetCostBasis(
   const fallback = best.get(item.marketHashName)?.best.priceCents ?? null;
   const amountCents = estimateAutoCostBasis(item.acquiredAt, history, fallback);
   if (amountCents !== null) {
-    upsertCostBasis(user.id, assetId, {
-      amountCents,
-      currency: 'USD',
-      source: 'auto',
-      acquiredAt: item.acquiredAt,
-    });
+    upsertCostBasis(
+      user.id,
+      assetId,
+      {
+        amountCents,
+        currency: 'USD',
+        source: 'auto',
+        acquiredAt: item.acquiredAt,
+      },
+      costBasisItemKey(item),
+    );
   } else {
     deleteCostBasis(user.id, assetId);
   }
@@ -280,7 +296,7 @@ export async function resetCostBasis(
   const status: PriceStatus = bestPrice ? freshness(bestPrice) : 'missing';
   const position: Position = {
     item,
-    costBasis: getAllCostBasis(user.id).get(assetId) ?? null,
+    costBasis: getAllCostBasisForItems(user.id, [item]).get(assetId) ?? null,
   };
   return valuePosition(position, bestPrice, status);
 }

@@ -189,28 +189,51 @@ db.prepare(
    VALUES (?, 'a1', 'AK-47 | Redline (Field-Tested)', 'AK-47 | Redline', 'rifle')`,
 ).run(otherUserId);
 
-costBasisDb.upsertCostBasis(userId, 'a1', {
-  amountCents: 1000,
-  currency: 'USD',
-  source: 'auto',
-  acquiredAt: '2026-06-01T00:00:00.000Z',
-});
-costBasisDb.upsertCostBasis(otherUserId, 'a1', {
-  amountCents: 7777,
-  currency: 'USD',
-  source: 'manual',
-  acquiredAt: null,
-});
+costBasisDb.upsertCostBasis(
+  userId,
+  'a1',
+  {
+    amountCents: 1000,
+    currency: 'USD',
+    source: 'auto',
+    acquiredAt: '2026-06-01T00:00:00.000Z',
+  },
+  costBasisDb.costBasisItemKey(makeItem('a1', 'AK-47 | Redline (Field-Tested)', 'rifle')),
+);
+costBasisDb.upsertCostBasis(
+  otherUserId,
+  'a1',
+  {
+    amountCents: 7777,
+    currency: 'USD',
+    source: 'manual',
+    acquiredAt: null,
+  },
+  costBasisDb.costBasisItemKey(makeItem('a1', 'AK-47 | Redline (Field-Tested)', 'rifle')),
+);
 assert.equal(costBasisDb.getCostBasis(userId, 'a1')?.amountCents, 1000);
 assert.equal(costBasisDb.getCostBasis(otherUserId, 'a1')?.amountCents, 7777);
-costBasisDb.upsertCostBasis(userId, 'a1', {
-  amountCents: 2500,
-  currency: 'USD',
-  source: 'manual',
-  acquiredAt: null,
-});
+costBasisDb.upsertCostBasis(
+  userId,
+  'a1',
+  {
+    amountCents: 2500,
+    currency: 'USD',
+    source: 'manual',
+    acquiredAt: null,
+  },
+  costBasisDb.costBasisItemKey(makeItem('a1', 'AK-47 | Redline (Field-Tested)', 'rifle')),
+);
 assert.equal(costBasisDb.getCostBasis(userId, 'a1')?.amountCents, 2500);
 assert.equal(costBasisDb.getAllCostBasis(userId).size, 1);
+db.prepare(`DELETE FROM items WHERE user_id = ? AND asset_id = 'a1'`).run(userId);
+assert.equal(costBasisDb.getCostBasis(userId, 'a1')?.amountCents, 2500);
+const replacement = makeItem('a2', 'AK-47 | Redline (Field-Tested)', 'rifle');
+db.prepare(
+  `INSERT INTO items (user_id, asset_id, market_hash_name, base_name, category)
+   VALUES (?, 'a2', 'AK-47 | Redline (Field-Tested)', 'AK-47 | Redline', 'rifle')`,
+).run(userId);
+assert.equal(costBasisDb.getAllCostBasisForItems(userId, [replacement]).get('a2')?.amountCents, 2500);
 costBasisDb.deleteCostBasis(userId, 'a1');
 assert.equal(costBasisDb.getCostBasis(userId, 'a1'), null);
 assert.equal(costBasisDb.getCostBasis(otherUserId, 'a1')?.amountCents, 7777);
