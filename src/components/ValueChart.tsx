@@ -49,14 +49,14 @@ export default function ValueChart({
       day: p.day,
       value,
       invested,
-      profit: value - invested,
+      profit: p.unrealizedPnlCents != null ? p.unrealizedPnlCents / 100 : value - invested,
     };
   });
 
   const isPerformance = kind === 'performance';
   const title = isPerformance ? 'Performance' : 'Holdings';
   const subtitle = isPerformance
-    ? 'Portfolio profit from available value and cost basis snapshots.'
+    ? 'Unrealized P/L from saved backend snapshots.'
     : 'Real portfolio value from saved backend snapshots.';
   const emptyText = isPerformance
     ? 'No profit history yet. Sync and price your inventory to build the series.'

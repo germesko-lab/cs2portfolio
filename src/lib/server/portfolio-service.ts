@@ -17,10 +17,21 @@ import {
   upsertSnapshot,
   backfillSnapshots,
   clearSnapshots,
+  getSnapshots,
+  createLedgerEntry,
+  realizedPnlForUser,
 } from '../valuation';
 import { getUserMeta, setUserMeta } from '../db';
 import { getItem, getItems, getPositions, upsertItems } from './items-repo';
 import { readSession, type AuthenticatedUser } from './steam-auth';
+import {
+  getSyncStatus,
+  markRefreshing,
+  recordCompleteness,
+  recordInventorySync,
+  recordPortfolioError,
+  recordPriceRefresh,
+} from './sync-status-repo';
 import type {
   CanonicalItem,
   Cents,
@@ -29,9 +40,10 @@ import type {
   SnapshotPoint,
 } from '../contracts/types';
 import type { BestPrice, PricePoint, PriceStatus } from '../contracts/pricing';
-import type { PositionValuation } from '../contracts/valuation';
+import type { PortfolioValuation, PositionValuation } from '../contracts/valuation';
 import type {
   ApiResult,
+  DashboardResponse,
   PortfolioResponse,
   RefreshResponse,
   SyncResponse,
@@ -85,6 +97,25 @@ function freshness(best: BestPrice): PriceStatus {
   return 'cached';
 }
 
+function sourceWarnings(userId: number): string[] {
+  const status = getSyncStatus(userId);
+  const warnings = status.failedSources.map((s) => `${s.source}: ${s.message}`);
+  if (status.lastError) warnings.push(status.lastError);
+  return warnings;
+}
+
+function applyDailyChange(valuation: PortfolioValuation, history: SnapshotPoint[]): PortfolioValuation {
+  if (history.length < 2) return valuation;
+  const prev = history[history.length - 2]!;
+  const last = history[history.length - 1]!;
+  const delta = last.totalValueCents - prev.totalValueCents;
+  return {
+    ...valuation,
+    dailyChangeCents: delta,
+    dailyChangePct: prev.totalValueCents === 0 ? null : (delta / prev.totalValueCents) * 100,
+  };
+}
+
 function priceAtOrBefore(history: PricePoint[], day: IsoDay): Cents | null {
   for (let i = history.length - 1; i >= 0; i--) {
     const point = history[i]!;
@@ -132,10 +163,12 @@ export async function syncInventory(
   input: string | null,
   forceDemo = false,
 ): Promise<SyncResponse> {
+  markRefreshing(user.id, true);
   let steamId: string, items: CanonicalItem[], source: 'fixture' | 'live';
   try {
     ({ steamId, items, source } = await fetchInventory(forceDemo ? null : input ?? user.steamId));
   } catch (err) {
+    recordPortfolioError(user.id, err instanceof Error ? err.message : String(err));
     throw toApiError(err);
   }
 
@@ -154,14 +187,9 @@ export async function syncInventory(
 
   const existingBasis = getAllCostBasisForItems(user.id, items);
   const needsBasis = items.filter((i) => !existingBasis.has(i.assetId));
-  let bestForFallback = new Map<string, BestPrice>();
-  if (needsBasis.length > 0) {
-    bestForFallback = await priceService.getBestPrices(distinctNames(needsBasis));
-  }
   for (const item of needsBasis) {
     const history = historyByName.get(item.marketHashName) ?? [];
-    const fallback = bestForFallback.get(item.marketHashName)?.best.priceCents ?? null;
-    const amountCents = estimateAutoCostBasis(item.acquiredAt, history, fallback);
+    const amountCents = estimateAutoCostBasis(item.acquiredAt, history, null);
     if (amountCents !== null) {
       upsertCostBasis(
         user.id,
@@ -201,11 +229,20 @@ export async function syncInventory(
   const syncedAt = new Date().toISOString();
   setUserMeta(user.id, 'steam_id', steamId);
   setUserMeta(user.id, 'last_sync_at', syncedAt);
+  const valuation = await buildValuation(user);
+  upsertSnapshot(user.id, buildSnapshot(valuation, todayUtc()));
+  recordInventorySync(user.id, syncedAt, valuation.dataCompleteness);
 
   return { steamId, itemCount: items.length, source, syncedAt };
 }
 
 export async function getPortfolio(user: AuthenticatedUser): Promise<PortfolioResponse> {
+  const valuation = await buildValuation(user);
+  recordCompleteness(user.id, valuation.dataCompleteness);
+  return portfolioResponse(user, valuation);
+}
+
+async function buildValuation(user: AuthenticatedUser): Promise<PortfolioValuation> {
   const positions = getPositions(user.id);
   const names = [...new Set(positions.map((p) => p.item.marketHashName))];
   const best =
@@ -217,20 +254,50 @@ export async function getPortfolio(user: AuthenticatedUser): Promise<PortfolioRe
   for (const [name, bestPrice] of best) statuses.set(name, freshness(bestPrice));
 
   const valuation = valuePortfolio(positions, best, statuses, new Date().toISOString());
-  upsertSnapshot(user.id, buildSnapshot(valuation, todayUtc()));
+  const realized = realizedPnlForUser(user.id);
+  const history = getSnapshots(user.id, 2);
+  return applyDailyChange(
+    {
+      ...valuation,
+      realizedPnlCents: realized,
+      allTimePnlCents: realized === null ? null : realized + valuation.unrealizedPlCents,
+      allTimePnlPct:
+        realized === null || valuation.knownCostBasisCents === 0
+          ? null
+          : ((realized + valuation.unrealizedPlCents) / valuation.knownCostBasisCents) * 100,
+    },
+    history,
+  );
+}
 
+function portfolioResponse(user: AuthenticatedUser, valuation: PortfolioValuation): PortfolioResponse {
+  const syncStatus = getSyncStatus(user.id);
   return {
     valuation,
     steamId: getUserMeta(user.id, 'steam_id') ?? user.steamId,
     lastSyncAt: getUserMeta(user.id, 'last_sync_at'),
+    lastPriceRefreshAt: syncStatus.lastPriceRefreshAt,
+    syncStatus,
+    dataCompleteness: valuation.dataCompleteness,
+    sourceWarnings: sourceWarnings(user.id),
     priceSources: priceService.sources(),
   };
 }
 
 export async function refreshPrices(user: AuthenticatedUser): Promise<RefreshResponse> {
+  markRefreshing(user.id, true);
   const names = distinctNames(getItems(user.id));
-  const updatedBySource = await priceService.refresh(names);
-  return { updatedBySource, refreshedAt: new Date().toISOString() };
+  try {
+    const updatedBySource = await priceService.refresh(names);
+    const refreshedAt = new Date().toISOString();
+    const valuation = await buildValuation(user);
+    upsertSnapshot(user.id, buildSnapshot(valuation, todayUtc()));
+    recordPriceRefresh(user.id, refreshedAt, valuation.dataCompleteness);
+    return { updatedBySource, refreshedAt };
+  } catch (err) {
+    recordPortfolioError(user.id, err instanceof Error ? err.message : String(err));
+    throw err;
+  }
 }
 
 export async function setManualCostBasis(
@@ -260,6 +327,16 @@ export async function setManualCostBasis(
     },
     costBasisItemKey(item),
   );
+  createLedgerEntry(user.id, {
+    type: 'manual_adjustment',
+    source: 'manual',
+    item,
+    unitPriceCents: amountCents,
+    notes: 'Manual cost basis update',
+  });
+  const valuation = await buildValuation(user);
+  upsertSnapshot(user.id, buildSnapshot(valuation, todayUtc()));
+  recordCompleteness(user.id, valuation.dataCompleteness);
   return valueSinglePosition(user, item);
 }
 
@@ -274,8 +351,7 @@ export async function resetCostBasis(
 
   const history = await priceService.getPriceHistory(item.marketHashName, HISTORY_DAYS);
   const best = await priceService.getBestPrices([item.marketHashName]);
-  const fallback = best.get(item.marketHashName)?.best.priceCents ?? null;
-  const amountCents = estimateAutoCostBasis(item.acquiredAt, history, fallback);
+  const amountCents = estimateAutoCostBasis(item.acquiredAt, history, null);
   if (amountCents !== null) {
     upsertCostBasis(
       user.id,
@@ -291,6 +367,9 @@ export async function resetCostBasis(
   } else {
     deleteCostBasis(user.id, assetId);
   }
+  const valuation = await buildValuation(user);
+  upsertSnapshot(user.id, buildSnapshot(valuation, todayUtc()));
+  recordCompleteness(user.id, valuation.dataCompleteness);
 
   const bestPrice = best.get(item.marketHashName) ?? null;
   const status: PriceStatus = bestPrice ? freshness(bestPrice) : 'missing';
@@ -299,4 +378,23 @@ export async function resetCostBasis(
     costBasis: getAllCostBasisForItems(user.id, [item]).get(assetId) ?? null,
   };
   return valuePosition(position, bestPrice, status);
+}
+
+export async function getDashboard(
+  user: AuthenticatedUser,
+  days = 30,
+): Promise<DashboardResponse> {
+  const valuation = await buildValuation(user);
+  recordCompleteness(user.id, valuation.dataCompleteness);
+  const response = portfolioResponse(user, valuation);
+  return {
+    ...response,
+    history: { days, points: getSnapshots(user.id, days) },
+    user: {
+      id: user.id,
+      steamId: user.steamId,
+      displayName: null,
+      avatarUrl: null,
+    },
+  };
 }

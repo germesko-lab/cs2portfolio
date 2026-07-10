@@ -11,3 +11,5 @@ export {
   costBasisItemKey,
 } from './cost-basis';
 export { upsertSnapshot, backfillSnapshots, getSnapshots, clearSnapshots } from './snapshots';
+export { createLedgerEntry, realizedPnlForUser } from './transactions';
+export type { LedgerInput, TransactionSource, TransactionType } from './transactions';

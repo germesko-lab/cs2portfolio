@@ -62,14 +62,17 @@ export function upsertQuotes(quotes: PriceQuote[]): void {
   if (quotes.length === 0) return;
   const stmt = db.prepare(
     `INSERT INTO price_quotes
-       (market_hash_name, source_id, price_cents, currency, listings_count, url, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+       (market_hash_name, source_id, price_cents, currency, listings_count, url, fetched_at, expires_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'success')
      ON CONFLICT(market_hash_name, source_id) DO UPDATE SET
        price_cents    = excluded.price_cents,
        currency       = excluded.currency,
        listings_count = excluded.listings_count,
        url            = excluded.url,
-       fetched_at     = excluded.fetched_at`,
+       fetched_at     = excluded.fetched_at,
+       expires_at     = excluded.expires_at,
+       status         = 'success',
+       error_message  = NULL`,
   );
   const run = db.transaction((qs: PriceQuote[]) => {
     for (const q of qs) {
@@ -81,10 +84,19 @@ export function upsertQuotes(quotes: PriceQuote[]): void {
         q.listingsCount,
         q.url,
         q.fetchedAt,
+        quoteExpiresAt(q),
       );
     }
   });
   run(quotes);
+}
+
+function quoteExpiresAt(q: PriceQuote): string {
+  const ttl =
+    q.sourceId === 'csgoskins' || q.sourceId === 'csfloat' ? 30 * 60_000
+    : q.sourceId === 'skinport' ? 10 * 60_000
+    : 0;
+  return new Date(Date.parse(q.fetchedAt) + ttl).toISOString();
 }
 
 /**
@@ -143,4 +155,34 @@ export function getHistory(marketHashName: string, days: number): PricePoint[] {
     )
     .all(marketHashName, cutoff) as HistoryRow[];
   return rows.map((r) => ({ day: r.day, priceCents: r.price_cents }));
+}
+
+export function recordPriceSourceStatus(
+  sourceId: string,
+  status: 'success' | 'failed' | 'skipped',
+  errorMessage: string | null = null,
+): void {
+  db.prepare(
+    `INSERT INTO price_source_status (source_id, status, checked_at, error_message)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(source_id) DO UPDATE SET
+       status = excluded.status,
+       checked_at = excluded.checked_at,
+       error_message = excluded.error_message`,
+  ).run(sourceId, status, new Date().toISOString(), errorMessage);
+}
+
+export function getFailedPriceSources(): Array<{ source: string; message: string }> {
+  const rows = db
+    .prepare(
+      `SELECT source_id, error_message
+       FROM price_source_status
+       WHERE status = 'failed'
+       ORDER BY checked_at DESC`,
+    )
+    .all() as Array<{ source_id: string; error_message: string | null }>;
+  return rows.map((row) => ({
+    source: row.source_id,
+    message: row.error_message ?? 'Price source failed.',
+  }));
 }

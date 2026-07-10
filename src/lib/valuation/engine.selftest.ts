@@ -35,9 +35,14 @@ const { db } = await import('../db');
 function makeItem(assetId: string, marketHashName: string, category: CanonicalItem['category']): CanonicalItem {
   return {
     assetId,
+    classId: null,
+    instanceId: null,
+    itemKey: `${marketHashName}||||0|0`,
+    inspectLink: null,
     marketHashName,
     baseName: marketHashName.replace(/ \(.*\)$/, ''),
     category,
+    rarity: null,
     wearName: null,
     floatValue: null,
     paintSeed: null,
@@ -46,6 +51,11 @@ function makeItem(assetId: string, marketHashName: string, category: CanonicalIt
     stickers: [],
     iconUrl: null,
     acquiredAt: null,
+    enrichmentStatus: 'missing',
+    enrichmentProvider: null,
+    paintIndex: null,
+    fadePercentage: null,
+    fadeRank: null,
   };
 }
 
@@ -61,6 +71,22 @@ function makeBestPrice(marketHashName: string, priceCents: number): BestPrice {
     fetchedAt: '2026-07-08T12:00:00.000Z',
   };
   return { marketHashName, best: quote, quotes: [quote] };
+}
+
+function snapshotLike(day: string, totalValueCents: number, investedCents: number) {
+  return {
+    day,
+    totalValueCents,
+    investedCents,
+  };
+}
+
+function snapshotStable(point: SnapshotPoint) {
+  return {
+    day: point.day,
+    totalValueCents: point.totalValueCents,
+    investedCents: point.investedCents,
+  };
 }
 
 const gainer: Position = {
@@ -97,10 +123,14 @@ const pv = engine.valuePortfolio([gainer, loser, unpriced, manual], bestPrices, 
 assert.equal(pv.asOf, asOf);
 assert.equal(pv.totalPositions, 4);
 assert.equal(pv.pricedPositions, 3);
+assert.equal(pv.priceMissingCount, 1);
+assert.equal(pv.costBasisMissingCount, 1);
 assert.equal(pv.totalValueCents, 1500 + 1200 + 3300);
 assert.equal(pv.investedCents, 1000 + 2000 + 3000);
 assert.equal(pv.unrealizedPlCents, 500 - 800 + 300);
 assert.equal(pv.unrealizedPlPct, 0);
+assert.equal(pv.realizedPnlCents, null);
+assert.equal(pv.allTimePnlCents, null);
 
 const v1 = pv.positions.find((p) => p.assetId === 'a1')!;
 assert.equal(v1.currentValueCents, 1500);
@@ -116,14 +146,17 @@ assert.equal(v3.unrealizedPlCents, null);
 assert.deepEqual(pv.positions.map((p) => p.assetId), ['a4', 'a1', 'a2', 'a3']);
 assert.deepEqual(
   pv.byCategory.map((c) => [c.category, c.valueCents, c.positionCount]),
-  [['pistol', 3300, 1], ['rifle', 1500, 1], ['knife', 1200, 1]],
+  [['pistol', 3300, 1], ['rifle', 1500, 1], ['knife', 1200, 1], ['unpriced', 0, 1]],
 );
 assert.deepEqual(pv.topGainers.map((p) => p.assetId), ['a1', 'a4']);
 assert.deepEqual(pv.topLosers.map((p) => p.assetId), ['a2']);
 
 const emptyPv = engine.valuePortfolio([unpriced], new Map(), new Map(), asOf);
 assert.equal(emptyPv.unrealizedPlPct, null);
-assert.deepEqual(emptyPv.byCategory, []);
+assert.deepEqual(
+  emptyPv.byCategory.map((c) => [c.category, c.valueCents, c.positionCount]),
+  [['unpriced', 0, 1]],
+);
 
 const zeroBasis = engine.valuePosition(
   { item: gainer.item, costBasis: { amountCents: 0, currency: 'USD', source: 'manual', acquiredAt: null } },
@@ -141,15 +174,16 @@ const history: PricePoint[] = [
 assert.equal(engine.estimateAutoCostBasis('2026-01-10T18:30:00.000Z', history, 777), 150);
 assert.equal(engine.estimateAutoCostBasis('2026-01-12T00:00:00.000Z', history, 777), 150);
 assert.equal(engine.estimateAutoCostBasis('2026-01-01T00:00:00.000Z', history, 777), 100);
-assert.equal(engine.estimateAutoCostBasis(null, history, 777), 100);
+assert.equal(engine.estimateAutoCostBasis(null, history, 777), null);
 assert.equal(engine.estimateAutoCostBasis('2026-01-10T00:00:00.000Z', [], 777), 777);
 assert.equal(engine.estimateAutoCostBasis('2026-01-10T00:00:00.000Z', [], null), null);
 
-assert.deepEqual(engine.buildSnapshot(pv, '2026-07-08'), {
-  day: '2026-07-08',
-  totalValueCents: 6000,
-  investedCents: 6000,
-});
+const builtSnapshot = engine.buildSnapshot(pv, '2026-07-08');
+assert.equal(builtSnapshot.day, '2026-07-08');
+assert.equal(builtSnapshot.totalValueCents, 6000);
+assert.equal(builtSnapshot.investedCents, 6000);
+assert.equal(builtSnapshot.noPriceItemCount, 1);
+assert.equal(builtSnapshot.missingCostBasisItemCount, 1);
 
 db.prepare(`INSERT INTO users (steam_id) VALUES ('76561198000000001')`).run();
 db.prepare(`INSERT INTO users (steam_id) VALUES ('76561198000000002')`).run();
@@ -161,18 +195,18 @@ snapshots.upsertSnapshot(userId, { day: '2026-07-02', totalValueCents: 200, inve
 snapshots.upsertSnapshot(otherUserId, { day: '2026-07-02', totalValueCents: 999, investedCents: 999 });
 
 let series: SnapshotPoint[] = snapshots.getSnapshots(userId, 30);
-assert.deepEqual(series, [
-  { day: '2026-07-01', totalValueCents: 100, investedCents: 50 },
-  { day: '2026-07-02', totalValueCents: 200, investedCents: 80 },
+assert.deepEqual(series.map(snapshotStable), [
+  snapshotLike('2026-07-01', 100, 50),
+  snapshotLike('2026-07-02', 200, 80),
 ]);
-assert.deepEqual(snapshots.getSnapshots(otherUserId, 30), [
-  { day: '2026-07-02', totalValueCents: 999, investedCents: 999 },
+assert.deepEqual(snapshots.getSnapshots(otherUserId, 30).map(snapshotStable), [
+  snapshotLike('2026-07-02', 999, 999),
 ]);
 
 snapshots.upsertSnapshot(userId, { day: '2026-07-02', totalValueCents: 250, investedCents: 90 });
 series = snapshots.getSnapshots(userId, 30);
 assert.equal(series.length, 2);
-assert.deepEqual(series[1], { day: '2026-07-02', totalValueCents: 250, investedCents: 90 });
+assert.deepEqual(snapshotStable(series[1]!), snapshotLike('2026-07-02', 250, 90));
 
 snapshots.backfillSnapshots(userId, [
   { day: '2026-06-30', totalValueCents: 10, investedCents: 5 },

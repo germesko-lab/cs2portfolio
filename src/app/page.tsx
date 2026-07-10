@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type {
+  DashboardResponse,
   HistoryResponse,
   PortfolioResponse,
   RefreshResponse,
@@ -60,9 +61,9 @@ export default function Dashboard() {
   const [moreOpen, setMoreOpen] = useState(false);
 
   const loadAll = useCallback(async (selectedRange: RangeKey) => {
-    const p = await api<PortfolioResponse>('/api/portfolio');
-    setPortfolio(p);
-    setHistory(await api<HistoryResponse>(`/api/history?days=${historyDays[selectedRange]}`));
+    const dashboard = await api<DashboardResponse>(`/api/portfolio/dashboard?days=${historyDays[selectedRange]}`);
+    setPortfolio(dashboard);
+    setHistory(dashboard.history);
   }, []);
 
   useEffect(() => {
@@ -171,13 +172,18 @@ export default function Dashboard() {
     void loadAll(range).catch((e) => setError(e instanceof Error ? e.message : 'Failed to reload portfolio.'));
   }, [loadAll, range]);
 
-  const dailyChange = useMemo(() => calcDailyChange(history), [history]);
+  const dailyChange = useMemo(() => {
+    const v = portfolio?.valuation;
+    if (v?.dailyChangeCents != null) return { delta: v.dailyChangeCents, pct: v.dailyChangePct };
+    return calcDailyChange(history);
+  }, [history, portfolio]);
   const valuation = portfolio?.valuation ?? null;
   const best = choosePerformer(valuation?.topGainers ?? []);
   const worst = choosePerformer(valuation?.topLosers ?? []);
   const bestPerformers = valuation?.topGainers.filter((p) => p.unrealizedPlCents != null).slice(0, 4) ?? [];
   const worstPerformers = valuation?.topLosers.filter((p) => p.unrealizedPlCents != null).slice(0, 2) ?? [];
   const missingCount = valuation ? valuation.totalPositions - valuation.pricedPositions : 0;
+  const hasComputablePnl = valuation ? valuation.positions.some((p) => p.unrealizedPlCents != null) : false;
 
   function changeRange(next: RangeKey) {
     setRange(next);
@@ -187,10 +193,12 @@ export default function Dashboard() {
   }
 
   function changeCurrency(next: Currency) {
-    setCurrency(next);
     if (next !== 'USD') {
-      setNotice('Currency conversion is not implemented in the backend yet; values remain USD.');
+      setCurrency('USD');
+      setNotice('Only USD is available right now; FX conversion is not implemented yet.');
+      return;
     }
+    setCurrency(next);
   }
 
   return (
@@ -205,8 +213,8 @@ export default function Dashboard() {
             <span className="currency-label">Currency</span>
             <select className="currency-select" value={currency} onChange={(e) => changeCurrency(e.target.value as Currency)}>
               <option value="USD">USD</option>
-              <option value="EUR">EUR</option>
-              <option value="UAH">UAH</option>
+              <option value="EUR" disabled>EUR unavailable</option>
+              <option value="UAH" disabled>UAH unavailable</option>
             </select>
           </label>
           <button className="theme-toggle" type="button" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}>
@@ -253,7 +261,11 @@ export default function Dashboard() {
             </div>
             <div className="side-metric">
               <span>Missing prices</span>
-              <strong>{valuation ? missingCount : '-'}</strong>
+              <strong>{valuation ? valuation.noPriceItemCount : '-'}</strong>
+            </div>
+            <div className="side-metric">
+              <span>Missing cost basis</span>
+              <strong>{valuation ? valuation.missingCostBasisItemCount : '-'}</strong>
             </div>
             <div className="side-metric">
               <span>Last sync</span>
@@ -279,6 +291,11 @@ export default function Dashboard() {
               </button>
             </div>
           )}
+          {portfolio?.sourceWarnings.length ? (
+            <div className="banner banner-info">
+              <span>Partial data: {portfolio.sourceWarnings.slice(0, 2).join('; ')}</span>
+            </div>
+          ) : null}
 
           {loading ? (
             <div className="skeleton-stack">
@@ -329,13 +346,16 @@ export default function Dashboard() {
                 </div>
                 <div className="portfolio-summary-grid">
                   <div className={`header-metric ${plClass(valuation.unrealizedPlCents)}`}>
-                    <span className="metric-label">All-time profit</span>
-                    <strong className="metric-value">{fmtSignedUsd(valuation.unrealizedPlCents)}</strong>
-                    <span className="metric-sub">{valuation.unrealizedPlPct != null ? fmtSignedPct(valuation.unrealizedPlPct) : 'N/A'}</span>
+                    <span className="metric-label">Unrealized P/L</span>
+                    <strong className="metric-value">{hasComputablePnl ? fmtSignedUsd(valuation.unrealizedPlCents) : 'N/A'}</strong>
+                    <span className="metric-sub">
+                      {hasComputablePnl && valuation.unrealizedPlPct != null ? fmtSignedPct(valuation.unrealizedPlPct) : 'Add cost basis to calculate'}
+                    </span>
                   </div>
                   <div className="header-metric">
-                    <span className="metric-label">Cost Basis</span>
-                    <strong className="metric-value">{fmtUsd(valuation.investedCents)}</strong>
+                    <span className="metric-label">Known Cost Basis</span>
+                    <strong className="metric-value">{fmtUsd(valuation.knownCostBasisCents)}</strong>
+                    <span className="metric-sub">All-time P/L unavailable until sells are tracked</span>
                   </div>
                 </div>
                 <div className="header-actions">
@@ -423,6 +443,8 @@ export default function Dashboard() {
                 As of {fmtTimestamp(valuation.asOf)}
                 {version ? ` - build ${version}` : ''}
                 {missingCount > 0 ? ` - ${missingCount} missing prices` : ''}
+                {valuation.missingCostBasisItemCount > 0 ? ` - ${valuation.missingCostBasisItemCount} missing cost basis` : ''}
+                {portfolio.syncStatus.lastPriceRefreshAt ? ` - prices ${fmtTimestamp(portfolio.syncStatus.lastPriceRefreshAt)}` : ''}
               </div>
 
               <PositionsTable positions={valuation.positions} onChanged={onTableChanged} onError={setError} />

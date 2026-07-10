@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types src/lib/valuation/engine.selftest.ts && node --experimental-strip-types src/lib/server/portfolio-foundation.selftest.ts",
     "db:reset": "rm -f data/portfolio.db && node -e \"require('child_process').execSync('npm run typecheck')\""
   },
   "dependencies": {

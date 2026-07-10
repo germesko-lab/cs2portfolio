@@ -28,10 +28,13 @@ export interface PositionValuation {
   /** unrealizedPl / costBasis * 100; null when not computable. */
   unrealizedPlPct: number | null;
   priceStatus: PriceStatus;
+  priceSource: string | null;
+  priceFetchedAt: IsoTimestamp | null;
+  priceConfidence: number | null;
 }
 
 export interface CategoryAllocation {
-  category: ItemCategory;
+  category: ItemCategory | 'unpriced';
   valueCents: Cents;
   /** Share of total priced portfolio value, 0..100. */
   weightPct: number;
@@ -44,18 +47,42 @@ export interface PortfolioValuation {
   totalValueCents: Cents;
   /** Sum of cost basis over positions that HAVE a cost basis. */
   investedCents: Cents;
+  /** Alias for the known cost basis sum; kept explicit for dashboard copy. */
+  knownCostBasisCents: Cents;
   /** Sum of per-position unrealized P/L where computable. */
   unrealizedPlCents: Cents;
   /** unrealizedPl / invested * 100 over computable positions; null if invested=0. */
   unrealizedPlPct: number | null;
+  realizedPnlCents: Cents | null;
+  allTimePnlCents: Cents | null;
+  allTimePnlPct: number | null;
+  dailyChangeCents: Cents | null;
+  dailyChangePct: number | null;
   totalPositions: number;
   /** Positions with a live/cached price (rest are 'missing'). */
   pricedPositions: number;
+  priceKnownCount: number;
+  priceMissingCount: number;
+  costBasisKnownCount: number;
+  costBasisMissingCount: number;
+  noPriceItemCount: number;
+  missingCostBasisItemCount: number;
   positions: PositionValuation[];
   byCategory: CategoryAllocation[];
   /** Top N by unrealizedPlCents desc/asc; only computable positions. N=5. */
   topGainers: PositionValuation[];
   topLosers: PositionValuation[];
+  dataCompleteness: DataCompleteness;
+}
+
+export interface DataCompleteness {
+  totalItems: number;
+  priceKnownCount: number;
+  priceMissingCount: number;
+  costBasisKnownCount: number;
+  costBasisMissingCount: number;
+  enrichmentKnownCount: number;
+  enrichmentMissingCount: number;
 }
 
 /* ------------------------------------------------------------------ */
@@ -80,8 +107,9 @@ export type ValuePortfolioFn = (
 
 /**
  * Hybrid cost-basis auto-estimate: price on the acquisition day from the
- * history series (nearest earlier point), else earliest point, else
- * fallbackCurrentCents, else null (pure).
+ * history series (nearest earlier point), else earliest point. Unknown
+ * acquisition dates remain unknown; fallbackCurrentCents must not be a
+ * current market price.
  */
 export type EstimateAutoCostBasisFn = (
   acquiredAt: IsoTimestamp | null,

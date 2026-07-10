@@ -24,7 +24,7 @@
  */
 import type { IsoTimestamp, SnapshotPoint } from './types';
 import type { PriceSourceId } from './pricing';
-import type { PortfolioValuation, PositionValuation } from './valuation';
+import type { DataCompleteness, PortfolioValuation, PositionValuation } from './valuation';
 
 export type ApiResult<T> =
   | { ok: true; data: T }
@@ -43,12 +43,39 @@ export interface PortfolioResponse {
   valuation: PortfolioValuation;
   steamId: string | null;
   lastSyncAt: IsoTimestamp | null;
+  lastPriceRefreshAt: IsoTimestamp | null;
+  syncStatus: SyncStatus;
+  dataCompleteness: DataCompleteness;
+  sourceWarnings: string[];
   priceSources: Array<{
     id: PriceSourceId;
     displayName: string;
     configured: boolean;
     requiresApiKey: boolean;
   }>;
+}
+
+export interface DashboardResponse extends PortfolioResponse {
+  history: HistoryResponse;
+  user: {
+    id: number;
+    steamId: string;
+    displayName: string | null;
+    avatarUrl: string | null;
+  };
+}
+
+export interface SyncStatus {
+  lastInventorySyncAt: IsoTimestamp | null;
+  lastPriceRefreshAt: IsoTimestamp | null;
+  lastEnrichmentRefreshAt: IsoTimestamp | null;
+  failedSources: Array<{ source: string; message: string }>;
+  missingPricesCount: number;
+  missingCostBasisCount: number;
+  missingEnrichmentCount: number;
+  isRefreshing: boolean;
+  lastError: string | null;
+  freshness: 'fresh' | 'stale' | 'partial' | 'failed' | 'empty';
 }
 
 export interface RefreshResponse {

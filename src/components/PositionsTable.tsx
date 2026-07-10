@@ -16,12 +16,17 @@ import {
 
 export function FloatBadge({ p }: { p: PositionValuation }) {
   const item = p.item;
-  if (item.floatValue == null && item.paintSeed == null) return <span className="muted-mini">Unavailable</span>;
+  if (item.floatValue == null && item.paintSeed == null && item.fadePercentage == null && item.fadeRank == null) {
+    return <span className="muted-mini">{item.enrichmentStatus === 'pending' ? 'Pending' : 'Unavailable'}</span>;
+  }
   const shortValue = item.floatValue != null ? item.floatValue.toFixed(4) : String(item.paintSeed);
   const lines = [
     item.floatValue != null ? `Float: ${item.floatValue.toFixed(8)}` : null,
     item.paintSeed != null ? `Paint seed: ${item.paintSeed}` : null,
-    'Fade percentage/rank is not in the backend contract yet.',
+    item.paintIndex != null ? `Paint index: ${item.paintIndex}` : null,
+    item.fadePercentage != null ? `Fade: ${item.fadePercentage.toFixed(5)}%` : null,
+    item.fadeRank != null ? `Rank #${item.fadeRank}` : null,
+    item.enrichmentProvider ? `Provider: ${item.enrichmentProvider}` : null,
   ].filter(Boolean);
   return (
     <span className="float-badge" tabIndex={0} data-tip={lines.join('\n')}>

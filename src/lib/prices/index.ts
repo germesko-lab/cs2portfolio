@@ -1,9 +1,9 @@
 /**
  * Price aggregator — the PriceService the rest of the app talks to.
  *
- * Policy (DECISIONS.md):
- * - "Best price" = the HIGHEST quote across configured sources (what the
- *   holder could sell for).
+ * Policy:
+ * - Display/current price prefers SkinSGG/csgoskins.gg when available because
+ *   it is the marketplace aggregation layer. Existing sources are fallbacks.
  * - Graceful degradation everywhere: source failures fall back to the
  *   SQLite quote cache (older fetchedAt signals staleness downstream);
  *   items nothing can price are simply omitted. Nothing here throws to
@@ -24,10 +24,16 @@ import { csfloatSource } from './csfloat';
 import { csgoskinsSource } from './csgoskins';
 import { skinportSource } from './skinport';
 import { mockSource } from './mock';
-import { getCachedQuotes, getHistory, upsertHistory, upsertQuotes } from './cache';
+import {
+  getCachedQuotes,
+  getHistory,
+  recordPriceSourceStatus,
+  upsertHistory,
+  upsertQuotes,
+} from './cache';
 
 /** Registration order = tie-break order when two sources quote equal cents. */
-const SOURCES: readonly PriceSource[] = [csfloatSource, csgoskinsSource, skinportSource, mockSource];
+const SOURCES: readonly PriceSource[] = [csgoskinsSource, skinportSource, csfloatSource, mockSource];
 
 /** How many days of history to pull from a source when backfilling. */
 const HISTORY_BACKFILL_DAYS = 120;
@@ -80,6 +86,11 @@ function highest(quotes: PriceQuote[]): PriceQuote {
   let best = quotes[0];
   for (const q of quotes) if (q.priceCents > best.priceCents) best = q;
   return best;
+}
+
+function selectedDisplayPrice(quotes: PriceQuote[]): PriceQuote {
+  const primary = quotes.find((q) => q.sourceId === 'csgoskins');
+  return primary ?? highest(quotes);
 }
 
 function configuredSources(): PriceSource[] {
@@ -138,6 +149,7 @@ export const priceService: PriceService = {
       if (needed.length === 0) continue;
       try {
         const quotes = await source.getQuotes(needed);
+        recordPriceSourceStatus(source.id, 'success');
         for (const name of needed) {
           const q = quotes.get(name);
           if (q) {
@@ -150,6 +162,7 @@ export const priceService: PriceService = {
         }
       } catch (err) {
         console.warn(`[prices] source ${source.id} getQuotes failed:`, err);
+        recordPriceSourceStatus(source.id, 'failed', err instanceof Error ? err.message : String(err));
       }
     }
 
@@ -173,7 +186,7 @@ export const priceService: PriceService = {
     for (const name of names) {
       const quotes = quotesByName.get(name);
       if (!quotes || quotes.length === 0) continue;
-      result.set(name, { marketHashName: name, best: highest(quotes), quotes });
+      result.set(name, { marketHashName: name, best: selectedDisplayPrice(quotes), quotes });
     }
     return result;
   },
@@ -188,6 +201,7 @@ export const priceService: PriceService = {
       for (const name of names) quoteMisses.delete(`${source.id} ${name}`);
       try {
         const quotes = await source.getQuotes(names);
+        recordPriceSourceStatus(source.id, 'success');
         const list = [...quotes.values()];
         upsertQuotes(list);
         counts[source.id] = list.length;
@@ -210,6 +224,7 @@ export const priceService: PriceService = {
         }
       } catch (err) {
         console.warn(`[prices] refresh via ${source.id} failed:`, err);
+        recordPriceSourceStatus(source.id, 'failed', err instanceof Error ? err.message : String(err));
       }
     }
     return counts;

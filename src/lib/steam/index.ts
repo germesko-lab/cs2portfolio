@@ -41,14 +41,25 @@ function fixtureInventory(): FetchInventoryResult {
   const items = normalizeInventory(FIXTURE_INVENTORY).map((item): CanonicalItem => {
     const extra = FIXTURE_EXTRAS[item.assetId];
     if (!extra) return item;
-    return {
+    const patched = {
       ...item,
       floatValue: extra.floatValue ?? item.floatValue,
       paintSeed: extra.paintSeed ?? item.paintSeed,
       acquiredAt: extra.acquiredAt ?? item.acquiredAt,
     };
+    return { ...patched, itemKey: itemKeyFor(patched), enrichmentStatus: 'success', enrichmentProvider: 'fixture' };
   });
   return { steamId: FIXTURE_STEAM_ID, items, source: 'fixture' };
+}
+
+function itemKeyFor(item: CanonicalItem): string {
+  return [
+    item.marketHashName,
+    item.floatValue == null ? '' : item.floatValue.toFixed(8),
+    item.paintSeed == null ? '' : String(item.paintSeed),
+    item.statTrak ? '1' : '0',
+    item.souvenir ? '1' : '0',
+  ].join('|');
 }
 
 async function liveRaw(steamId64: string): Promise<RawInventoryResponse> {

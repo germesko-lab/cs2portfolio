@@ -47,6 +47,14 @@ export interface StickerApplique {
 export interface CanonicalItem {
   /** Steam asset id — unique per item instance, primary key. */
   assetId: string;
+  /** Steam class id shared by the same market description, when available. */
+  classId: string | null;
+  /** Steam instance id for the concrete description variant, when available. */
+  instanceId: string | null;
+  /** Stable fallback identity for preserving user-entered data across resyncs. */
+  itemKey: string;
+  /** Steam inspect/action link, when Steam exposes it. */
+  inspectLink: string | null;
   /**
    * Exact Steam market_hash_name, e.g.
    * "AK-47 | Redline (Field-Tested)", "★ Karambit | Fade (Factory New)",
@@ -57,6 +65,7 @@ export interface CanonicalItem {
   /** Display name without wear/StatTrak/Souvenir/★, e.g. "AK-47 | Redline". */
   baseName: string;
   category: ItemCategory;
+  rarity: string | null;
   /** Parsed from marketHashName; null for wear-less items (stickers, cases…). */
   wearName: WearName | null;
   /** Exact float 0..1 when known (inspect-link flow); null in MVP for live data. */
@@ -70,6 +79,12 @@ export interface CanonicalItem {
   iconUrl: string | null;
   /** Best-known acquisition time; null when Steam doesn't expose it. */
   acquiredAt: IsoTimestamp | null;
+  /** Provider-agnostic enrichment state for float/paint/fade data. */
+  enrichmentStatus?: 'missing' | 'pending' | 'success' | 'failed';
+  enrichmentProvider?: string | null;
+  paintIndex?: number | null;
+  fadePercentage?: number | null;
+  fadeRank?: number | null;
 }
 
 /** How a position's cost basis was determined (hybrid model, DECISIONS.md). */
@@ -94,4 +109,12 @@ export interface SnapshotPoint {
   day: IsoDay;
   totalValueCents: Cents;
   investedCents: Cents;
+  capturedAt?: IsoTimestamp | null;
+  knownCostBasisCents?: Cents | null;
+  unrealizedPnlCents?: Cents | null;
+  realizedPnlCents?: Cents | null;
+  itemCount?: number | null;
+  noPriceItemCount?: number | null;
+  missingCostBasisItemCount?: number | null;
+  dataCompleteness?: Record<string, unknown> | null;
 }

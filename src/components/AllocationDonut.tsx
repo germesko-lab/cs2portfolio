@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { CategoryAllocation } from '@/lib/contracts/valuation';
-import type { ItemCategory } from '@/lib/contracts/types';
-import { CATEGORY_COLORS, CATEGORY_LABELS, fmtPct, fmtUsd, fmtUsdCompact } from './format';
+import { CATEGORY_COLORS, CATEGORY_LABELS, fmtPct, fmtUsd, fmtUsdCompact, type CategoryKey } from './format';
 
 const size = 232;
 const radius = 86;
@@ -11,7 +10,7 @@ const strokeWidth = 34;
 const circumference = 2 * Math.PI * radius;
 
 export default function AllocationDonut({ allocation, embedded = false }: { allocation: CategoryAllocation[]; embedded?: boolean }) {
-  const [hovered, setHovered] = useState<ItemCategory | null>(null);
+  const [hovered, setHovered] = useState<CategoryKey | null>(null);
   const data = useMemo(
     () =>
       allocation

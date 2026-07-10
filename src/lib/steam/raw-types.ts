@@ -45,6 +45,11 @@ export interface RawDescriptionLine {
   color?: string;
 }
 
+export interface RawAction {
+  link: string;
+  name: string;
+}
+
 /** Shared visual/market metadata for one classid+instanceid combination. */
 export interface RawDescription {
   appid: number;
@@ -56,6 +61,7 @@ export interface RawDescription {
   icon_url?: string;
   icon_url_large?: string;
   descriptions?: RawDescriptionLine[];
+  actions?: RawAction[];
   tradable: 0 | 1;
   name?: string;
   name_color?: string;

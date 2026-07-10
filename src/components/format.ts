@@ -1,5 +1,7 @@
 import type { Cents, IsoDay, IsoTimestamp, ItemCategory } from '@/lib/contracts/types';
 
+export type CategoryKey = ItemCategory | 'unpriced';
+
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const usdWhole = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -61,7 +63,7 @@ export function plClass(cents: Cents | null): string {
   return cents > 0 ? 'pl-gain' : 'pl-loss';
 }
 
-export const CATEGORY_COLORS: Record<ItemCategory, string> = {
+export const CATEGORY_COLORS: Record<CategoryKey, string> = {
   knife: '#3861fb',
   gloves: '#16c784',
   rifle: '#f7b678',
@@ -72,9 +74,10 @@ export const CATEGORY_COLORS: Record<ItemCategory, string> = {
   case: '#f59e0b',
   agent: '#94a3b8',
   other: '#64748b',
+  unpriced: '#ef4444',
 };
 
-export const CATEGORY_LABELS: Record<ItemCategory, string> = {
+export const CATEGORY_LABELS: Record<CategoryKey, string> = {
   knife: 'Knives',
   gloves: 'Gloves',
   rifle: 'Rifles',
@@ -85,4 +88,5 @@ export const CATEGORY_LABELS: Record<ItemCategory, string> = {
   case: 'Cases',
   agent: 'Agents',
   other: 'Other',
+  unpriced: 'Unpriced',
 };

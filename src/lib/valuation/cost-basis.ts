@@ -25,6 +25,7 @@ function rowToCostBasis(row: CostBasisRow): CostBasis {
 }
 
 export function costBasisItemKey(item: CanonicalItem): string {
+  if (item.itemKey) return item.itemKey;
   return [
     item.marketHashName,
     item.floatValue == null ? '' : item.floatValue.toFixed(8),

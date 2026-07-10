@@ -25,7 +25,6 @@ function downloadCsv(filename: string, rows: Array<Array<string | number | null 
 
 export default function ExportPopover({ portfolio }: { portfolio: PortfolioResponse | null }) {
   const [open, setOpen] = useState(false);
-  const [includeTransactions, setIncludeTransactions] = useState(false);
   const [includeOverview, setIncludeOverview] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -84,11 +83,6 @@ export default function ExportPopover({ portfolio }: { portfolio: PortfolioRespo
         ]);
       });
     }
-    if (includeTransactions) {
-      rows.push([]);
-      rows.push(['Transaction history']);
-      rows.push(['Transaction export awaits a backend transaction history endpoint.']);
-    }
     downloadCsv(`cs2-portfolio-${new Date().toISOString().slice(0, 10)}.csv`, rows);
     setOpen(false);
   }
@@ -104,12 +98,13 @@ export default function ExportPopover({ portfolio }: { portfolio: PortfolioRespo
             <input
               className="export-choice"
               type="checkbox"
-              checked={includeTransactions}
-              onChange={(e) => setIncludeTransactions(e.target.checked)}
+              checked={false}
+              disabled
+              readOnly
             />
             <span className="export-option-text">
               <strong>Transaction History</strong>
-              <small>Awaiting backend transaction history</small>
+              <small>Available after ledger export is implemented</small>
             </span>
             <span className="export-check" aria-hidden="true" />
           </label>
@@ -132,7 +127,7 @@ export default function ExportPopover({ portfolio }: { portfolio: PortfolioRespo
             <button
               className="primary export-submit"
               type="button"
-              disabled={!portfolio || (!includeTransactions && !includeOverview)}
+              disabled={!portfolio || !includeOverview}
               onClick={exportCsv}
             >
               Export to CSV

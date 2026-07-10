@@ -44,6 +44,9 @@ export const valuePosition: ValuePositionFn = (position, bestPrice, priceStatus)
     unrealizedPlCents,
     unrealizedPlPct,
     priceStatus,
+    priceSource: bestPrice?.best.sourceDisplayName ?? null,
+    priceFetchedAt: bestPrice?.best.fetchedAt ?? null,
+    priceConfidence: bestPrice ? (priceStatus === 'live' ? 1 : 0.65) : null,
   };
 };
 
@@ -60,6 +63,9 @@ export const valuePortfolio: ValuePortfolioFn = (positions, bestPrices, statuses
   let investedCents: Cents = 0;
   let unrealizedPlCents: Cents = 0;
   let pricedPositions = 0;
+  let costBasisKnownCount = 0;
+  let computableBasisCents = 0;
+  let enrichmentKnownCount = 0;
 
   for (const v of valuations) {
     if (v.currentValueCents !== null) {
@@ -68,14 +74,19 @@ export const valuePortfolio: ValuePortfolioFn = (positions, bestPrices, statuses
     }
     if (v.costBasisCents !== null) {
       investedCents += v.costBasisCents;
+      costBasisKnownCount += 1;
     }
     if (v.unrealizedPlCents !== null) {
       unrealizedPlCents += v.unrealizedPlCents;
+      computableBasisCents += v.costBasisCents ?? 0;
+    }
+    if (v.item.enrichmentStatus === 'success' || v.item.floatValue != null || v.item.paintSeed != null) {
+      enrichmentKnownCount += 1;
     }
   }
 
   const unrealizedPlPct: number | null =
-    investedCents === 0 ? null : (unrealizedPlCents / investedCents) * 100;
+    computableBasisCents === 0 ? null : (unrealizedPlCents / computableBasisCents) * 100;
 
   // Allocation over priced value only; empty when nothing is priced.
   const byCategoryMap = new Map<ItemCategory, { valueCents: Cents; positionCount: number }>();
@@ -97,6 +108,15 @@ export const valuePortfolio: ValuePortfolioFn = (positions, bestPrices, statuses
           }))
           .sort((a, b) => b.valueCents - a.valueCents)
       : [];
+  const noPriceItemCount = positions.length - pricedPositions;
+  if (noPriceItemCount > 0) {
+    byCategory.push({
+      category: 'unpriced',
+      valueCents: 0,
+      weightPct: 0,
+      positionCount: noPriceItemCount,
+    });
+  }
 
   // Only computable positions; gainers strictly > 0, losers strictly < 0.
   const computable = valuations.filter(
@@ -123,14 +143,35 @@ export const valuePortfolio: ValuePortfolioFn = (positions, bestPrices, statuses
     asOf,
     totalValueCents,
     investedCents,
+    knownCostBasisCents: investedCents,
     unrealizedPlCents,
     unrealizedPlPct,
+    realizedPnlCents: null,
+    allTimePnlCents: null,
+    allTimePnlPct: null,
+    dailyChangeCents: null,
+    dailyChangePct: null,
     totalPositions: positions.length,
     pricedPositions,
+    priceKnownCount: pricedPositions,
+    priceMissingCount: noPriceItemCount,
+    costBasisKnownCount,
+    costBasisMissingCount: positions.length - costBasisKnownCount,
+    noPriceItemCount,
+    missingCostBasisItemCount: positions.length - costBasisKnownCount,
     positions: sortedPositions,
     byCategory,
     topGainers,
     topLosers,
+    dataCompleteness: {
+      totalItems: positions.length,
+      priceKnownCount: pricedPositions,
+      priceMissingCount: noPriceItemCount,
+      costBasisKnownCount,
+      costBasisMissingCount: positions.length - costBasisKnownCount,
+      enrichmentKnownCount,
+      enrichmentMissingCount: positions.length - enrichmentKnownCount,
+    },
   };
   return result;
 };
@@ -145,13 +186,12 @@ export const estimateAutoCostBasis: EstimateAutoCostBasisFn = (
   history,
   fallbackCurrentCents,
 ) => {
+  if (acquiredAt === null) return null;
   if (history.length === 0) return fallbackCurrentCents ?? null;
 
   // Days are YYYY-MM-DD, so lexicographic order == chronological order.
   const sorted = [...history].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
   const earliest = sorted[0]!;
-
-  if (acquiredAt === null) return earliest.priceCents;
 
   const acquiredDay = acquiredAt.slice(0, 10); // ISO timestamp → YYYY-MM-DD
   let best: Cents | null = null;
@@ -168,4 +208,12 @@ export const buildSnapshot: BuildSnapshotFn = (valuation, day) => ({
   day,
   totalValueCents: valuation.totalValueCents,
   investedCents: valuation.investedCents,
+  capturedAt: valuation.asOf,
+  knownCostBasisCents: valuation.knownCostBasisCents,
+  unrealizedPnlCents: valuation.unrealizedPlCents,
+  realizedPnlCents: valuation.realizedPnlCents,
+  itemCount: valuation.totalPositions,
+  noPriceItemCount: valuation.noPriceItemCount,
+  missingCostBasisItemCount: valuation.missingCostBasisItemCount,
+  dataCompleteness: valuation.dataCompleteness,
 });

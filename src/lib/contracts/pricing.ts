@@ -56,8 +56,8 @@ export interface PriceSource {
 }
 
 /**
- * Cross-source result for one item. `best` = the HIGHEST quote across
- * configured sources (what the holder could sell for — see DECISIONS.md);
+ * Cross-source result for one item. `best` is the selected display quote:
+ * SkinSGG/csgoskins when available, otherwise the best available fallback.
  * `quotes` = every source's quote for the per-source breakdown UI.
  */
 export interface BestPrice {
