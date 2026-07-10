@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="color-scheme" content="dark">
+  <meta name="supported-color-schemes" content="dark">
+  <title>Price alert — kinetic email</title>
+  <!--[if mso]>
+  <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+  <style>td,div,p,a{font-family:Arial,Helvetica,sans-serif !important;}</style>
+  <![endif]-->
+  <style>
+    html, body { margin:0 !important; padding:0 !important; width:100% !important; }
+    table, td { mso-table-lspace:0pt !important; mso-table-rspace:0pt !important; border-collapse:collapse; }
+    a { text-decoration:none; }
+    .mono { font-family:'SF Mono','Roboto Mono',Consolas,Menlo,monospace; }
+
+    /* ============================================================
+       KINETIC CORE
+       The interactive (tabbed) version is hidden by default and only
+       revealed in WebKit clients (Apple Mail, iOS Mail, some Android)
+       that keep <input> elements and support :checked selectors.
+       Everyone else (Gmail strips <input>) sees the static fallback.
+       ============================================================ */
+    .kinetic { display:none; }
+
+    @media screen and (-webkit-min-device-pixel-ratio: 0) {
+      /* verify inputs survived sanitization via checkbox guard */
+      #k-guard:checked ~ div .kinetic { display:block !important; max-height:none !important; }
+      #k-guard:checked ~ div .fallback { display:none !important; }
+
+      input.tab { display:none !important; }
+
+      .tab-label {
+        display:inline-block; cursor:pointer;
+        font:700 12px/1 -apple-system,Arial,sans-serif; letter-spacing:1px;
+        color:#7a8194; padding:12px 18px; border-radius:10px 10px 0 0;
+        border:1px solid transparent; border-bottom:none;
+        transition:color .15s ease, background .15s ease;
+      }
+      .tab-label:hover { color:#c9d0e0; }
+
+      /* panels */
+      .panel { display:none; }
+      #tab-gainers:checked ~ .tabs-ui .lbl-gainers,
+      #tab-losers:checked  ~ .tabs-ui .lbl-losers,
+      #tab-watch:checked   ~ .tabs-ui .lbl-watch {
+        color:#ffd166; background:#141926; border-color:#232a3d;
+      }
+      #tab-gainers:checked ~ .tabs-ui .panel-gainers { display:block; }
+      #tab-losers:checked  ~ .tabs-ui .panel-losers  { display:block; }
+      #tab-watch:checked   ~ .tabs-ui .panel-watch   { display:block; }
+
+      /* live pulse dot */
+      @keyframes pulse {
+        0%   { box-shadow:0 0 0 0 rgba(61,220,151,.55); }
+        70%  { box-shadow:0 0 0 9px rgba(61,220,151,0); }
+        100% { box-shadow:0 0 0 0 rgba(61,220,151,0); }
+      }
+      .live-dot { animation:pulse 1.8s ease-out infinite; }
+
+      /* shimmering progress toward target price */
+      @keyframes shimmer {
+        0%   { background-position:-200px 0; }
+        100% { background-position:200px 0; }
+      }
+      .target-fill {
+        background-image:linear-gradient(90deg,#3ddc97 0%,#8affce 50%,#3ddc97 100%) !important;
+        background-size:200px 100% !important;
+        animation:shimmer 2.2s linear infinite;
+      }
+
+      /* card lift on hover */
+      .lift { transition:transform .18s ease, box-shadow .18s ease; }
+      .lift:hover { transform:translateY(-2px); box-shadow:0 10px 30px rgba(0,0,0,.45); }
+    }
+
+    @media only screen and (max-width:640px) {
+      .container { width:100% !important; }
+      .px { padding-left:18px !important; padding-right:18px !important; }
+      .big { font-size:34px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#0b0e14; word-spacing:normal;">
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
+    Target hit: AWP | Asiimov crossed $142 — 94% of the way to your sell target&nbsp;&#8202;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
+  </div>
+
+  <!-- Guard checkbox must precede everything it controls -->
+  <!--[if !mso]><!-->
+  <input type="checkbox" id="k-guard" checked style="display:none !important; mso-hide:all; max-height:0; overflow:hidden;">
+  <!--<![endif]-->
+
+  <div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#0b0e14;">
+    <tr>
+      <td align="center" style="padding:32px 12px 48px;">
+        <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
+        <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:600px;">
+
+          <!-- Header with live badge -->
+          <tr>
+            <td class="px" style="padding:0 8px 22px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font:800 17px/1 Arial,sans-serif; color:#f2f4f8; letter-spacing:.4px;">
+                    <span style="color:#ff7a45;">▮</span>&nbsp;CS2&nbsp;PORTFOLIO
+                  </td>
+                  <td align="right">
+                    <span class="live-dot" style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:#3ddc97; vertical-align:middle;"></span>
+                    <span class="mono" style="font:700 11px/1 Consolas,monospace; color:#3ddc97; vertical-align:middle;">&nbsp;PRICE ALERT</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Alert hero -->
+          <tr>
+            <td class="lift" style="background:linear-gradient(135deg,#141926 0%,#1a1430 100%); background-color:#141926; border-radius:16px; border:1px solid #2d2a4d;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td class="px" style="padding:30px 36px 0;">
+                    <div style="font:600 11px/1 Arial,sans-serif; color:#9b8aff; letter-spacing:2px;">TARGET ALMOST REACHED</div>
+                    <div class="big" style="font:800 32px/1.2 Arial,sans-serif; color:#f2f4f8; padding-top:12px;">AWP | Asiimov</div>
+                    <div style="font:500 13px/1.5 Arial,sans-serif; color:#7a8194; padding-top:4px;">Covert · Field-Tested · float 0.2841</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px" style="padding:22px 36px 0;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td class="mono" style="font:800 40px/1 Consolas,monospace; color:#3ddc97;">$142.37</td>
+                        <td align="right" class="mono" style="font:600 13px/1.5 Consolas,monospace; color:#7a8194;">
+                          your target<br><span style="color:#ffd166; font-size:18px; font-weight:800;">$150.00</span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <!-- progress to target: static green in Gmail, animated shimmer in Apple Mail -->
+                <tr>
+                  <td class="px" style="padding:18px 36px 8px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+                      <td class="target-fill" height="10" width="94%" style="background-color:#3ddc97; border-radius:6px 0 0 6px; font-size:0;">&nbsp;</td>
+                      <td height="10" width="6%" style="background-color:#232a3d; border-radius:0 6px 6px 0; font-size:0;">&nbsp;</td>
+                    </tr></table>
+                    <div class="mono" style="font:600 11px/1 Consolas,monospace; color:#7a8194; padding:8px 0 0;">94% of target · +$9.12 (+6.8%) in 48h</div>
+                  </td>
+                </tr>
+                <tr><td style="padding:16px;">&nbsp;</td></tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ====================== KINETIC TABS ====================== -->
+          <tr>
+            <td style="padding-top:26px;">
+
+              <!--[if !mso]><!-->
+              <input type="radio" name="ktabs" id="tab-gainers" class="tab" checked>
+              <input type="radio" name="ktabs" id="tab-losers" class="tab">
+              <input type="radio" name="ktabs" id="tab-watch" class="tab">
+              <!--<![endif]-->
+
+              <div class="tabs-ui">
+                <!-- Interactive version (Apple Mail / iOS) -->
+                <div class="kinetic">
+                  <div style="padding:0 8px;">
+                    <label for="tab-gainers" class="tab-label lbl-gainers">▲ GAINERS</label><label for="tab-losers" class="tab-label lbl-losers">▼ LOSERS</label><label for="tab-watch" class="tab-label lbl-watch">◉ WATCHLIST</label>
+                  </div>
+
+                  <div class="panel panel-gainers" style="background:#141926; border:1px solid #232a3d; border-radius:0 14px 14px 14px; padding:22px 28px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="font:700 14px/2.2 -apple-system,Arial,sans-serif; color:#f2f4f8;">AK-47 | Case Hardened</td>
+                        <td align="right" class="mono" style="font:700 14px/2.2 Consolas,monospace; color:#3ddc97;">+6.4%</td>
+                      </tr>
+                      <tr>
+                        <td style="font:700 14px/2.2 -apple-system,Arial,sans-serif; color:#f2f4f8;">Butterfly Knife | Fade</td>
+                        <td align="right" class="mono" style="font:700 14px/2.2 Consolas,monospace; color:#3ddc97;">+3.1%</td>
+                      </tr>
+                      <tr>
+                        <td style="font:700 14px/2.2 -apple-system,Arial,sans-serif; color:#f2f4f8;">USP-S | Kill Confirmed</td>
+                        <td align="right" class="mono" style="font:700 14px/2.2 Consolas,monospace; color:#3ddc97;">+2.2%</td>
+                      </tr>
+                    </table>
+                  </div>
+
+                  <div class="panel panel-losers" style="background:#141926; border:1px solid #232a3d; border-radius:0 14px 14px 14px; padding:22px 28px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="font:700 14px/2.2 -apple-system,Arial,sans-serif; color:#f2f4f8;">Desert Eagle | Blaze</td>
+                        <td align="right" class="mono" style="font:700 14px/2.2 Consolas,monospace; color:#ff6b6b;">−1.8%</td>
+                      </tr>
+                      <tr>
+                        <td style="font:700 14px/2.2 -apple-system,Arial,sans-serif; color:#f2f4f8;">Glock-18 | Fade</td>
+                        <td align="right" class="mono" style="font:700 14px/2.2 Consolas,monospace; color:#ff6b6b;">−0.9%</td>
+                      </tr>
+                    </table>
+                  </div>
+
+                  <div class="panel panel-watch" style="background:#141926; border:1px solid #232a3d; border-radius:0 14px 14px 14px; padding:22px 28px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="font:700 14px/2.2 -apple-system,Arial,sans-serif; color:#f2f4f8;">M4A4 | Howl</td>
+                        <td align="right" class="mono" style="font:600 14px/2.2 Consolas,monospace; color:#ffd166;">$4,120 · watching</td>
+                      </tr>
+                      <tr>
+                        <td style="font:700 14px/2.2 -apple-system,Arial,sans-serif; color:#f2f4f8;">Karambit | Doppler P2</td>
+                        <td align="right" class="mono" style="font:600 14px/2.2 Consolas,monospace; color:#ffd166;">$1,388 · watching</td>
+                      </tr>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Static fallback (Gmail, Outlook, everything else): all sections stacked -->
+                <div class="fallback">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#141926; border:1px solid #232a3d; border-radius:14px;">
+                    <tr><td class="px" style="padding:22px 28px 4px; font:800 12px/1 Arial,sans-serif; color:#3ddc97; letter-spacing:1.5px;">▲ GAINERS</td></tr>
+                    <tr><td class="px" style="padding:8px 28px 14px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr><td style="font:700 14px/2.1 Arial,sans-serif; color:#f2f4f8;">AK-47 | Case Hardened</td><td align="right" class="mono" style="font:700 14px/2.1 Consolas,monospace; color:#3ddc97;">+6.4%</td></tr>
+                        <tr><td style="font:700 14px/2.1 Arial,sans-serif; color:#f2f4f8;">Butterfly Knife | Fade</td><td align="right" class="mono" style="font:700 14px/2.1 Consolas,monospace; color:#3ddc97;">+3.1%</td></tr>
+                        <tr><td style="font:700 14px/2.1 Arial,sans-serif; color:#f2f4f8;">USP-S | Kill Confirmed</td><td align="right" class="mono" style="font:700 14px/2.1 Consolas,monospace; color:#3ddc97;">+2.2%</td></tr>
+                      </table>
+                    </td></tr>
+                    <tr><td class="px" style="padding:6px 28px 4px; font:800 12px/1 Arial,sans-serif; color:#ff6b6b; letter-spacing:1.5px; border-top:1px solid #232a3d;">▼ LOSERS</td></tr>
+                    <tr><td class="px" style="padding:8px 28px 14px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr><td style="font:700 14px/2.1 Arial,sans-serif; color:#f2f4f8;">Desert Eagle | Blaze</td><td align="right" class="mono" style="font:700 14px/2.1 Consolas,monospace; color:#ff6b6b;">−1.8%</td></tr>
+                        <tr><td style="font:700 14px/2.1 Arial,sans-serif; color:#f2f4f8;">Glock-18 | Fade</td><td align="right" class="mono" style="font:700 14px/2.1 Consolas,monospace; color:#ff6b6b;">−0.9%</td></tr>
+                      </table>
+                    </td></tr>
+                    <tr><td class="px" style="padding:6px 28px 4px; font:800 12px/1 Arial,sans-serif; color:#ffd166; letter-spacing:1.5px; border-top:1px solid #232a3d;">◉ WATCHLIST</td></tr>
+                    <tr><td class="px" style="padding:8px 28px 22px;">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr><td style="font:700 14px/2.1 Arial,sans-serif; color:#f2f4f8;">M4A4 | Howl</td><td align="right" class="mono" style="font:600 14px/2.1 Consolas,monospace; color:#ffd166;">$4,120 · watching</td></tr>
+                        <tr><td style="font:700 14px/2.1 Arial,sans-serif; color:#f2f4f8;">Karambit | Doppler P2</td><td align="right" class="mono" style="font:600 14px/2.1 Consolas,monospace; color:#ffd166;">$1,388 · watching</td></tr>
+                      </table>
+                    </td></tr>
+                  </table>
+                </div>
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td align="center" style="padding:30px 0 10px;">
+              <!--[if mso]>
+              <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="https://cs2portfolio.app/dashboard" style="height:50px;v-text-anchor:middle;width:280px;" arcsize="24%" fillcolor="#9b8aff" stroke="f">
+                <w:anchorlock/>
+                <center style="color:#0b0e14;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">Review sell targets →</center>
+              </v:roundrect>
+              <![endif]-->
+              <!--[if !mso]><!-->
+              <a class="lift" href="https://cs2portfolio.app/dashboard"
+                 style="display:inline-block; background:linear-gradient(92deg,#9b8aff,#6a5cff); background-color:#6a5cff; color:#0b0e14; font:800 15px/50px Arial,sans-serif; padding:0 44px; border-radius:12px;">
+                Review sell targets&nbsp;→
+              </a>
+              <!--<![endif]-->
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding:26px 24px 0;">
+              <div style="font:500 11px/1.7 Arial,sans-serif; color:#565d70;">
+                Alert triggered at 14:32 UTC when Skinport best-ask crossed your threshold.<br>
+                <a href="https://cs2portfolio.app/settings" style="color:#7a8194; text-decoration:underline;">manage alerts</a> · <a href="https://cs2portfolio.app/unsubscribe" style="color:#7a8194; text-decoration:underline;">unsubscribe</a>
+              </div>
+            </td>
+          </tr>
+
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+      </td>
+    </tr>
+  </table>
+  </div>
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!--
+  AMP for Email (amp4email) — the email is a living app:
+  · amp-list re-fetches portfolio JSON from the server EVERY TIME the email is opened,
+    so prices in the inbox are always current, even weeks after sending
+  · amp-bind powers an in-email USD/EUR currency toggle
+  · amp-carousel swipes through featured skins
+  · amp-accordion expands per-item marketplace quotes
+  · amp-form refreshes quotes without leaving the inbox
+
+  Delivery notes: sent as a text/x-amp-html MIME part alongside a regular HTML
+  fallback (e.g. 01-weekly-report.html). Rendering in Gmail/Yahoo/Mail.ru
+  requires sender registration with each provider. Endpoints must be served
+  over HTTPS with AMP CORS headers (AMP-Email-Allow-Sender).
+-->
+<!doctype html>
+<html ⚡4email data-css-strict>
+<head>
+  <meta charset="utf-8">
+  <style amp4email-boilerplate>body{visibility:hidden}</style>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <script async custom-element="amp-list" src="https://cdn.ampproject.org/v0/amp-list-0.1.js"></script>
+  <script async custom-template="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script>
+  <script async custom-element="amp-carousel" src="https://cdn.ampproject.org/v0/amp-carousel-0.2.js"></script>
+  <script async custom-element="amp-accordion" src="https://cdn.ampproject.org/v0/amp-accordion-0.1.js"></script>
+  <script async custom-element="amp-form" src="https://cdn.ampproject.org/v0/amp-form-0.1.js"></script>
+  <script async custom-element="amp-bind" src="https://cdn.ampproject.org/v0/amp-bind-0.1.js"></script>
+  <style amp-custom>
+    body { margin:0; padding:0; background:#0b0e14; font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif; }
+    .wrap { max-width:600px; margin:0 auto; padding:28px 14px 44px; }
+    .mono { font-family:'SF Mono','Roboto Mono',Consolas,Menlo,monospace; }
+
+    .brand { font-weight:800; font-size:17px; color:#f2f4f8; letter-spacing:.4px; padding:0 6px 18px; }
+    .brand .tick { color:#ff7a45; }
+    .badge { float:right; font-size:11px; font-weight:700; color:#3ddc97; border:1px solid #1e4d3c; background:#0f2019; border-radius:20px; padding:5px 12px; letter-spacing:1px; }
+
+    .card { background:#141926; border:1px solid #232a3d; border-radius:16px; padding:26px 30px; margin-bottom:16px; }
+    .label { font-size:11px; font-weight:600; color:#7a8194; letter-spacing:2px; text-transform:uppercase; }
+    .kpi { font-size:42px; font-weight:800; color:#f5b84c; padding-top:8px; }
+    .delta-up { color:#3ddc97; font-weight:700; font-size:15px; padding-top:8px; }
+    .muted { color:#7a8194; font-weight:500; }
+
+    .cur-toggle { margin-top:16px; }
+    .cur-toggle button {
+      background:#0f1420; border:1px solid #232a3d; color:#7a8194;
+      font-size:12px; font-weight:700; padding:8px 18px; border-radius:8px; cursor:pointer;
+    }
+    .cur-toggle button.active { color:#ffd166; border-color:#4a5a8f; }
+
+    .row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #1c2334; }
+    .row:last-child { border-bottom:none; }
+    .item-name { color:#f2f4f8; font-weight:700; font-size:14px; }
+    .item-sub { color:#7a8194; font-size:11px; padding-top:3px; }
+    .px-up { color:#3ddc97; font-weight:700; font-size:14px; text-align:right; }
+    .px-down { color:#ff6b6b; font-weight:700; font-size:14px; text-align:right; }
+
+    .slide { background:#0f1420; border:1px solid #232a3d; border-radius:14px; padding:22px; margin:0 6px; text-align:center; }
+    .slide .rarity { font-size:10px; font-weight:800; letter-spacing:2px; }
+    .rarity-covert { color:#eb4b4b; }
+    .rarity-knife { color:#d32ce6; }
+    .rarity-classified { color:#d32ce6; }
+    .slide .name { color:#f2f4f8; font-weight:800; font-size:16px; padding-top:8px; }
+    .slide .price { color:#ffd166; font-weight:800; font-size:22px; padding-top:10px; }
+
+    amp-accordion section h4 {
+      background:#141926; color:#c9d0e0; font-size:13px; font-weight:700;
+      border:1px solid #232a3d; border-radius:10px; padding:14px 18px; margin:8px 0 0;
+    }
+    amp-accordion section[expanded] h4 { color:#ffd166; }
+    .acc-body { background:#0f1420; border:1px solid #232a3d; border-top:none; border-radius:0 0 10px 10px; padding:14px 18px; color:#7a8194; font-size:13px; line-height:1.7; }
+    .acc-body b { color:#3ddc97; }
+
+    .refresh-btn {
+      width:100%; background:#ff7a45; color:#12060a; border:none; border-radius:12px;
+      font-size:15px; font-weight:800; padding:15px 0; cursor:pointer; margin-top:4px;
+    }
+    .refresh-btn:hover { background:#ff8f63; }
+    .form-msg { font-size:12px; color:#3ddc97; text-align:center; padding-top:10px; }
+
+    .footer { text-align:center; color:#565d70; font-size:11px; line-height:1.7; padding-top:22px; }
+    .footer a { color:#7a8194; }
+    .spinner-note { color:#565d70; font-size:12px; text-align:center; padding:12px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap" [class]="'wrap cur-' + currency">
+    <amp-state id="fx"><script type="application/json">{ "currency": "USD", "rate": 0.92 }</script></amp-state>
+
+    <div class="brand">
+      <span class="badge">LIVE · RE-FETCHED ON OPEN</span>
+      <span class="tick">▮</span> CS2 PORTFOLIO
+    </div>
+
+    <!-- ===== Live portfolio value: fetched fresh every open ===== -->
+    <div class="card">
+      <div class="label">Total portfolio value — right now</div>
+      <amp-list layout="fixed-height" height="120"
+                src="https://cs2portfolio.app/api/amp/portfolio-summary"
+                items="." single-item>
+        <template type="amp-mustache">
+          <div class="kpi mono" [text]="currency == 'USD' ? '${{valueUsd}}' : '€' + '{{valueEur}}'">${{valueUsd}}</div>
+          <div class="delta-up">▲ +${{deltaUsd}} <span class="muted">({{deltaPct}}%) since your last visit</span></div>
+        </template>
+        <div placeholder class="spinner-note">Fetching live prices…</div>
+        <div fallback class="spinner-note">Couldn't reach the price server — open the dashboard instead.</div>
+      </amp-list>
+
+      <div class="cur-toggle">
+        <button [class]="currency == 'USD' ? 'active' : ''" class="active"
+                on="tap:AMP.setState({ currency: 'USD' })">USD</button>
+        <button [class]="currency == 'EUR' ? 'active' : ''"
+                on="tap:AMP.setState({ currency: 'EUR' })">EUR</button>
+      </div>
+    </div>
+
+    <!-- ===== Swipeable featured skins ===== -->
+    <div class="card">
+      <div class="label">Featured holdings — swipe</div>
+      <amp-carousel layout="fixed-height" height="150" type="slides" style="margin-top:14px;">
+        <div class="slide">
+          <div class="rarity rarity-knife">★ COVERT · FACTORY NEW</div>
+          <div class="name">Butterfly Knife | Fade</div>
+          <div class="price mono">$1,842.00</div>
+        </div>
+        <div class="slide">
+          <div class="rarity rarity-covert">COVERT · FIELD-TESTED</div>
+          <div class="name">AK-47 | Case Hardened</div>
+          <div class="price mono">$486.10</div>
+        </div>
+        <div class="slide">
+          <div class="rarity rarity-classified">CLASSIFIED · MINIMAL WEAR</div>
+          <div class="name">USP-S | Kill Confirmed</div>
+          <div class="price mono">$214.55</div>
+        </div>
+      </amp-carousel>
+    </div>
+
+    <!-- ===== Live movers list ===== -->
+    <div class="card">
+      <div class="label">Top movers — live</div>
+      <amp-list layout="fixed-height" height="190"
+                src="https://cs2portfolio.app/api/amp/top-movers"
+                items="items">
+        <template type="amp-mustache">
+          <div class="row">
+            <div>
+              <div class="item-name">{{name}}</div>
+              <div class="item-sub">{{rarity}} · {{wear}} · best on {{bestSource}}</div>
+            </div>
+            <div class="{{#up}}px-up{{/up}}{{^up}}px-down{{/up}} mono">{{changePct}}%<br><span class="muted">${{price}}</span></div>
+          </div>
+        </template>
+        <div placeholder class="spinner-note">Loading movers…</div>
+        <div fallback class="spinner-note">Price feed unavailable.</div>
+      </amp-list>
+    </div>
+
+    <!-- ===== Expandable marketplace breakdown ===== -->
+    <div class="card">
+      <div class="label">Best price per marketplace</div>
+      <amp-accordion expand-single-section>
+        <section>
+          <h4>AWP | Asiimov — $142.37 ▸</h4>
+          <div class="acc-body">
+            Skinport <b>$142.37</b> · CSFloat $141.90 · Steam $156.20 (−13% fees)<br>
+            Your target: $150.00 — <b>94% reached</b>
+          </div>
+        </section>
+        <section>
+          <h4>M4A4 | Howl — $4,120.00 ▸</h4>
+          <div class="acc-body">
+            CSFloat <b>$4,120.00</b> · Skinport $4,185.00<br>
+            Contraband — supply shrinks monthly, spread widening
+          </div>
+        </section>
+        <section>
+          <h4>Karambit | Doppler (Phase 2) — $1,388.00 ▸</h4>
+          <div class="acc-body">
+            Skinport <b>$1,388.00</b> · CSFloat $1,402.50<br>
+            Phase 2 premium vs P1/P3: <b>+11%</b>
+          </div>
+        </section>
+      </amp-accordion>
+    </div>
+
+    <!-- ===== Refresh quotes without leaving the inbox ===== -->
+    <form method="post" action-xhr="https://cs2portfolio.app/api/amp/refresh-prices">
+      <input type="hidden" name="scope" value="portfolio">
+      <button class="refresh-btn" type="submit">↻ Refresh quotes in this email</button>
+      <div submit-success><template type="amp-mustache"><div class="form-msg">Quotes refreshed at {{refreshedAt}} — scroll up, numbers are already updated.</div></template></div>
+      <div submit-error><template type="amp-mustache"><div class="form-msg" style="color:#ff6b6b;">Refresh failed — try again in a minute.</div></template></div>
+    </form>
+
+    <div class="footer">
+      Live data via Skinport &amp; CSFloat · this email re-queries the server each time you open it.<br>
+      <a href="https://cs2portfolio.app/settings">notification settings</a> · <a href="https://cs2portfolio.app/unsubscribe">unsubscribe</a>
+    </div>
+  </div>
+</body>
+</html>
